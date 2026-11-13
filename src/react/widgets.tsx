@@ -1,0 +1,267 @@
+/**
+ * Default form widgets, one per field type (docs/08 §3.1).
+ *
+ * Each widget renders ONLY its control; {@link FieldShell} renders the label, help and error once
+ * for every widget (including overrides). Native elements are used on purpose: they are accessible
+ * by default and keep the package free of a component library. Apps restyle or replace any of them
+ * through the registry.
+ *
+ * @module
+ */
+import { type ChangeEvent, useId, useState } from 'react'
+import { INTEGER_TYPES } from '../core/validation.ts'
+import { useStrutvane } from './context.ts'
+import { relationId, useDebouncedValue, useRelationLabel, useRelationOptions } from './relations.ts'
+import type { Widget, WidgetProps } from './types.ts'
+
+/** Attributes every control shares. */
+function common(p: WidgetProps) {
+  return {
+    id: p.id,
+    name: p.name,
+    onBlur: p.onBlur,
+    'aria-invalid': p.invalid || undefined,
+    'aria-describedby': p.describedBy,
+    'aria-required': (p.field.required && !p.readOnly) || undefined,
+  } as const
+}
+
+const asString = (v: unknown): string =>
+  v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)
+
+const INPUT_TYPES: Readonly<Record<string, string>> = {
+  email: 'email',
+  url: 'url',
+  phone: 'tel',
+  color: 'color',
+}
+
+/** Single-line text (string, slug, email, url, phone…). Empty input becomes `null`. */
+export const TextWidget: Widget = (p) => (
+  <input
+    {...common(p)}
+    type={INPUT_TYPES[p.field.type] ?? 'text'}
+    value={asString(p.value)}
+    readOnly={p.readOnly}
+    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+      p.onChange(e.target.value === '' ? null : e.target.value)
+    }
+  />
+)
+
+/** Multi-line text. */
+export const TextareaWidget: Widget = (p) => (
+  <textarea
+    {...common(p)}
+    value={asString(p.value)}
+    readOnly={p.readOnly}
+    rows={3}
+    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+      p.onChange(e.target.value === '' ? null : e.target.value)
+    }
+  />
+)
+
+/** The locale's decimal separator (`.` in `en`, `,` in `de`). */
+function decimalSeparator(locale: string): string {
+  try {
+    return (
+      new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === 'decimal')
+        ?.value ?? '.'
+    )
+  } catch {
+    return '.'
+  }
+}
+
+/** A number as a person types it, with `.` as separator. A trailing `.` (`1250.`) still counts. */
+const TYPED_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i
+
+/**
+ * Parse what a person typed into the form value: a finite number, `null` for empty input, or the
+ * raw text when it is not (yet) a number, so validation can say "must be a number" instead of
+ * silently dropping input. The locale's decimal separator is accepted.
+ */
+export function parseTypedNumber(raw: string, locale = 'en'): number | string | null {
+  const trimmed = raw.trim()
+  if (trimmed === '') return null
+  const sep = decimalSeparator(locale)
+  const normalized = sep === '.' ? trimmed : trimmed.replace(sep, '.')
+  if (!TYPED_NUMBER.test(normalized)) return raw
+  const n = Number(normalized)
+  return Number.isFinite(n) ? n : raw
+}
+
+/**
+ * Numbers (integer, decimal, money, percent…). The input shows the person's DRAFT text, not the
+ * parsed value: re-rendering the parsed value on every keystroke would turn `1250.` into `1250` and
+ * swallow the decimal point (spike 08 defect). The draft only resyncs when the form value changes
+ * from outside (reset, record loaded) to something the draft does not already represent.
+ */
+export const NumberWidget: Widget = (p) => {
+  const { locale } = useStrutvane()
+  const [draft, setDraft] = useState(() => asString(p.value))
+  const [seen, setSeen] = useState<unknown>(p.value)
+  if (!Object.is(seen, p.value)) {
+    // Derived-state pattern: adjust during render instead of in an effect (no flash, no loop).
+    setSeen(p.value)
+    if (!Object.is(parseTypedNumber(draft, locale), p.value)) setDraft(asString(p.value))
+  }
+  return (
+    <input
+      {...common(p)}
+      type="text"
+      inputMode={INTEGER_TYPES.has(p.field.type) ? 'numeric' : 'decimal'}
+      autoComplete="off"
+      value={draft}
+      readOnly={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value
+        const parsed = parseTypedNumber(raw, locale)
+        setDraft(raw)
+        setSeen(parsed)
+        p.onChange(parsed)
+      }}
+    />
+  )
+}
+
+/** Enum: a native select with an empty choice. */
+export const SelectWidget: Widget = (p) => {
+  const { t } = useStrutvane()
+  return (
+    <select
+      {...common(p)}
+      value={asString(p.value)}
+      disabled={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+        p.onChange(e.target.value === '' ? null : e.target.value)
+      }
+    >
+      <option value="">{t('ui.form.select')}</option>
+      {(p.field.enumValues ?? []).map((v) => (
+        <option key={v} value={v}>
+          {v}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Boolean: a checkbox. */
+export const CheckboxWidget: Widget = (p) => (
+  <input
+    {...common(p)}
+    type="checkbox"
+    checked={p.value === true}
+    disabled={p.readOnly}
+    onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(e.target.checked)}
+  />
+)
+
+/** Date (`YYYY-MM-DD`): the native date input. */
+export const DateWidget: Widget = (p) => (
+  <input
+    {...common(p)}
+    type="date"
+    value={asString(p.value)}
+    readOnly={p.readOnly}
+    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+      p.onChange(e.target.value === '' ? null : e.target.value)
+    }
+  />
+)
+
+/** Read-only display of any value (computed fields, or any field an app wants shown, not edited). */
+export const ReadOnlyWidget: Widget = (p) => (
+  <input {...common(p)} type="text" value={asString(p.value)} readOnly onChange={() => {}} />
+)
+
+/**
+ * belongsTo: a searchable, paginated picker.
+ *
+ * A native select (accessible, keyboard-friendly) holds the loaded options; a search box above it
+ * filters on the server (debounced), and "Load more" fetches the next page of 100, so every record
+ * of a large target is reachable. The currently selected record is always present as an option,
+ * even when it is not in the loaded pages (its title is fetched by id).
+ */
+export const RelationPickerWidget: Widget = (p) => {
+  const { t } = useStrutvane()
+  const searchId = useId()
+  const [search, setSearch] = useState('')
+  const debounced = useDebouncedValue(search, 250)
+  const relation = useRelationOptions(p.field, debounced)
+  const selectedId = relationId(p.value)
+  const selectedLabel = useRelationLabel(p.field, p.value)
+  const options =
+    selectedId !== undefined && !relation.options.some((o) => o.value === selectedId)
+      ? [{ value: selectedId, label: selectedLabel ?? selectedId }, ...relation.options]
+      : relation.options
+  const targetLabel = relation.target?.pluralLabel ?? p.field.label
+  return (
+    <div>
+      {relation.searchable && !p.readOnly && (
+        <input
+          id={searchId}
+          type="search"
+          aria-label={t('ui.form.searchRelation', { resource: targetLabel })}
+          aria-controls={p.id}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      )}
+      <select
+        {...common(p)}
+        value={selectedId ?? ''}
+        disabled={p.readOnly}
+        aria-busy={relation.isLoading || undefined}
+        onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+          p.onChange(e.target.value === '' ? null : e.target.value)
+        }
+      >
+        <option value="">
+          {relation.isLoading ? t('ui.form.relationLoading') : t('ui.form.select')}
+        </option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {relation.hasMore && !p.readOnly && (
+        <button type="button" onClick={relation.loadMore} disabled={relation.isLoadingMore}>
+          {relation.isLoadingMore ? t('ui.form.relationLoading') : t('ui.form.loadMore')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Default widget map, keyed by field type or widget name. `default` is the required fallback. */
+export const defaultWidgets: Readonly<Record<string, Widget>> = Object.freeze({
+  default: TextWidget,
+  string: TextWidget,
+  slug: TextWidget,
+  email: TextWidget,
+  url: TextWidget,
+  phone: TextWidget,
+  color: TextWidget,
+  text: TextareaWidget,
+  textarea: TextareaWidget,
+  markdown: TextareaWidget,
+  richText: TextareaWidget,
+  integer: NumberWidget,
+  bigInteger: NumberWidget,
+  decimal: NumberWidget,
+  float: NumberWidget,
+  money: NumberWidget,
+  percent: NumberWidget,
+  number: NumberWidget,
+  enum: SelectWidget,
+  boolean: CheckboxWidget,
+  date: DateWidget,
+  computed: ReadOnlyWidget,
+  readonly: ReadOnlyWidget,
+  belongsTo: RelationPickerWidget,
+  'relation-picker': RelationPickerWidget,
+})
