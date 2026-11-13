@@ -55,6 +55,7 @@ pnpm sv add ui   # or: npm create strutvane@latest my-ui -- --preset ui
 | [`@strutvane/contracts`](https://github.com/vishwajit-vm/strutvane-contracts) | Shared types and wire protocols |
 | [`strutvane` / `@strutvane/cli`](https://github.com/vishwajit-vm/strutvane-cli) | Unified CLI |
 | [`@strutvane/devkit`](https://github.com/vishwajit-vm/strutvane-devkit) | SDK for installers, generators and plugins |
+| [`@strutvane/logs`](https://github.com/vishwajit-vm/strutvane-logs) | Zero-config logging + built-in log viewer (default) |
 | [`create-strutvane`](https://github.com/vishwajit-vm/create-strutvane) | Project starter |
 
 ## Documentation
