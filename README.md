@@ -59,7 +59,8 @@ export function App() {
 
 Routes: `/:resource` (list), `/:resource/new`, `/:resource/:id` (detail, with related lists for
 `hasMany` relations whose foreign key is filterable), `/:resource/:id/edit`. A 401 from any request
-returns to the sign-in screen with a notice; unknown paths and resources the user cannot see show
+returns to the sign-in screen with a notice; a sign-out the server did not confirm (offline, 5xx)
+keeps you signed in and says so, so a live session never hides behind the sign-in screen; unknown paths and resources the user cannot see show
 the same "not found or no access" page. The pieces are exported too: `Router`, `Link`,
 `useRouter`, `matchPath`, `ResourceDetail`, `SignIn`, and `createSessionClient` from
 `@strutvane/ui/core`.

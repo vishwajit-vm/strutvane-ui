@@ -122,6 +122,7 @@ export const defaultMessages: MessageCatalog = Object.freeze({
   'ui.app.invalidCredentials': 'The email or password is wrong.',
   'ui.app.tooManyAttempts': 'Too many attempts. Try again in {seconds} seconds.',
   'ui.app.signOut': 'Sign out',
+  'ui.app.signOutFailed': 'Could not sign out. You are still signed in; please try again.',
   'ui.app.workspace': 'Workspace',
   'ui.app.chooseWorkspace': 'Choose a workspace',
   'ui.app.noWorkspace':

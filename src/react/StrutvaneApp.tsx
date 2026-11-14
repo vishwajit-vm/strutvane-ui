@@ -20,7 +20,9 @@
  *
  * Failure scenarios: a 401 from any request (session expired, signed out elsewhere) returns to the
  * sign-in screen with a notice; a manifest that cannot load shows an error instead of an empty app;
- * unknown paths and hidden resources show the same "not found or no access" page (no enumeration).
+ * unknown paths and hidden resources show the same "not found or no access" page (no enumeration);
+ * a sign-out the server did not confirm (offline, 5xx) keeps the user signed in and says so, so a
+ * live session never hides behind a screen that claims it ended.
  *
  * @module
  */
@@ -223,6 +225,23 @@ function SignedIn(props: SignedInProps): ReactElement {
     queryFn: ({ signal }) => session.tenants(signal).catch(() => [] as SessionTenant[]),
   })
   const [switching, setSwitching] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [headerError, setHeaderError] = useState<string | undefined>()
+  // Sign-out must be CONFIRMED by the server (or answered 401: already gone) before the UI shows
+  // the sign-in screen. Showing it after a failed request would leave a live session behind a
+  // screen that says it ended: on a shared computer, the next person reloads and is signed in.
+  const signOut = async () => {
+    setSigningOut(true)
+    setHeaderError(undefined)
+    try {
+      await session.signOut()
+    } catch {
+      setSigningOut(false)
+      setHeaderError(t('ui.app.signOutFailed'))
+      return
+    }
+    props.onSignedOut()
+  }
   const switchTo = useCallback(
     async (tenantId: string) => {
       setSwitching(true)
@@ -291,10 +310,16 @@ function SignedIn(props: SignedInProps): ReactElement {
         <button
           type="button"
           className="sv-signout"
-          onClick={() => void session.signOut().finally(props.onSignedOut)}
+          disabled={signingOut}
+          onClick={() => void signOut()}
         >
           {t('ui.app.signOut')}
         </button>
+      ) : null}
+      {headerError ? (
+        <p role="alert" className="sv-error">
+          {headerError}
+        </p>
       ) : null}
     </header>
   )

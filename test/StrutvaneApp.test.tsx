@@ -33,7 +33,16 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 const problem = (status: number, code: string, headers: Record<string, string> = {}) =>
   json({ type: 'about:blank', title: code, status, code }, status, headers)
 
-function fakeServer(options: { tenants?: number; signedIn?: boolean } = {}): FakeServer {
+function fakeServer(
+  options: {
+    tenants?: number
+    signedIn?: boolean
+    /** Status the sign-out endpoint fails with (the session stays alive on the server). */
+    failSignOut?: number
+    /** Status the switch-tenant endpoint fails with. */
+    failSwitch?: number
+  } = {},
+): FakeServer {
   let tenantId: string | undefined
   let attempts = 0
   const server: FakeServer = {
@@ -58,6 +67,7 @@ function fakeServer(options: { tenants?: number; signedIn?: boolean } = {}): Fak
           return json(actor())
         }
         case 'POST /api/v1/auth/sign-out':
+          if (options.failSignOut) return problem(options.failSignOut, 'SERVICE_UNAVAILABLE')
           server.signedIn = false
           return new Response(null, { status: 204 })
         case 'GET /api/v1/auth/tenants':
@@ -70,6 +80,7 @@ function fakeServer(options: { tenants?: number; signedIn?: boolean } = {}): Fak
             })),
           })
         case 'POST /api/v1/auth/switch-tenant':
+          if (options.failSwitch) return problem(options.failSwitch, 'FORBIDDEN')
           tenantId = (JSON.parse(String(init?.body)) as { tenantId: string }).tenantId
           return json(actor())
         case 'GET /.well-known/strutvane.json':
@@ -215,6 +226,50 @@ describe('<StrutvaneApp>', () => {
     const select = await screen.findByRole('combobox', { name: 'Workspace' })
     await user.selectOptions(select, TENANT)
     await waitFor(() => expect(server.calls).toContain('POST /api/v1/auth/switch-tenant'))
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('heading', { name: 'Sign in to Northwind' })).toBeInTheDocument()
+  })
+
+  // Security: a sign-out the server did not confirm must never LOOK like a sign-out. On a shared
+  // computer the next person would get the still-valid session by reloading the page.
+  it.each([
+    [503, 'a server error'],
+    [0, 'the network being down'],
+  ])('a sign-out that fails with %s (%s) keeps the user signed in and says so', async (status) => {
+    const server = fakeServer({ signedIn: true, failSignOut: status === 0 ? 599 : status })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const base = server.fetch
+    if (status === 0)
+      server.fetch = async (input, init) => {
+        if (String(input).endsWith('/auth/sign-out')) throw new TypeError('Failed to fetch')
+        return base(input, init)
+      }
+    try {
+      app(server)
+      const user = userEvent.setup()
+      await settled(server)
+      await screen.findByRole('heading', { name: 'Welcome to Northwind' })
+      await user.click(screen.getByRole('button', { name: 'Sign out' }))
+      expect(
+        await screen.findByText('Could not sign out. You are still signed in; please try again.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Sign in to Northwind' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('a sign-out answered with 401 (session already gone) shows the sign-in screen', async () => {
+    const server = fakeServer({ signedIn: true, failSignOut: 401 })
+    app(server)
+    const user = userEvent.setup()
+    await settled(server)
+    await screen.findByRole('heading', { name: 'Welcome to Northwind' })
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(await screen.findByRole('heading', { name: 'Sign in to Northwind' })).toBeInTheDocument()
   })
