@@ -75,6 +75,7 @@ export {
   DateWidget,
   defaultWidgets,
   NumberWidget,
+  numericText,
   parseTypedNumber,
   ReadOnlyWidget,
   RelationPickerWidget,

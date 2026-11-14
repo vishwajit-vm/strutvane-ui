@@ -30,27 +30,48 @@ export const BooleanCell: Cell = ({ value }) => {
   )
 }
 
-function formatNumber(value: number, locale: string, options: Intl.NumberFormatOptions): string {
+/** A decimal or integer as a string (`"1250.50"`, `"-3"`): how exact numbers travel over JSON. */
+const NUMERIC_STRING = /^-?\d+(\.\d+)?$/
+
+/**
+ * Format a number for display. Numeric strings (decimals and big integers, exchanged as text to
+ * keep their precision) are formatted from the string itself, so no digit is lost on the way.
+ */
+function formatNumber(
+  value: number | string,
+  locale: string,
+  options: Intl.NumberFormatOptions,
+): string {
   try {
-    return new Intl.NumberFormat(locale, options).format(value)
+    const format = new Intl.NumberFormat(locale, options).format as (v: number | string) => string
+    return format(value)
   } catch {
     return String(value)
   }
 }
 
-/** Integers and floats, locale-formatted. */
+/** A number, or a numeric string, ready for {@link formatNumber}; `undefined` otherwise. */
+function numericValue(value: unknown): number | string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && NUMERIC_STRING.test(value)) return value
+  return undefined
+}
+
+/** Integers and floats (numbers or numeric strings), locale-formatted. */
 export const NumberCell: Cell = ({ value }) => {
   const { t, locale } = useStrutvane()
-  return <>{typeof value === 'number' ? formatNumber(value, locale, {}) : t('ui.cell.empty')}</>
+  const n = numericValue(value)
+  return <>{n !== undefined ? formatNumber(n, locale, {}) : t('ui.cell.empty')}</>
 }
 
 /** Decimals and money: always two fraction digits. */
 export const DecimalCell: Cell = ({ value }) => {
   const { t, locale } = useStrutvane()
+  const n = numericValue(value)
   return (
     <>
-      {typeof value === 'number'
-        ? formatNumber(value, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      {n !== undefined
+        ? formatNumber(n, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : t('ui.cell.empty')}
     </>
   )

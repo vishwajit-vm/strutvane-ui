@@ -93,6 +93,20 @@ export function parseTypedNumber(raw: string, locale = 'en'): number | string | 
 }
 
 /**
+ * What a person typed, as the exact decimal text an API expects (`"1250.50"`): the locale's
+ * separator becomes `.`, a leading `+` and a trailing `.` are dropped, digits are kept as typed
+ * (no float rounding). Exponents (`1e5`) are expanded through Number, the only lossy case.
+ */
+export function numericText(raw: string, locale = 'en'): string {
+  const sep = decimalSeparator(locale)
+  let text = (sep === '.' ? raw.trim() : raw.trim().replace(sep, '.')).replace(/^\+/, '')
+  if (/e/i.test(text)) return String(Number(text))
+  if (text.startsWith('.')) text = `0${text}`
+  if (text.startsWith('-.')) text = `-0${text.slice(1)}`
+  return text.endsWith('.') ? text.slice(0, -1) : text
+}
+
+/**
  * Numbers (integer, decimal, money, percent…). The input shows the person's DRAFT text, not the
  * parsed value: re-rendering the parsed value on every keystroke would turn `1250.` into `1250` and
  * swallow the decimal point (spike 08 defect). The draft only resyncs when the form value changes
@@ -100,12 +114,19 @@ export function parseTypedNumber(raw: string, locale = 'en'): number | string | 
  */
 export const NumberWidget: Widget = (p) => {
   const { locale } = useStrutvane()
+  // Decimals and big integers travel as strings (the field's schema says `type: "string"`) so no
+  // precision is lost: send those as canonical text, everything else as a number.
+  const asText = p.field.schema?.['type'] === 'string'
+  const toValue = (raw: string): number | string | null => {
+    const parsed = parseTypedNumber(raw, locale)
+    return asText && typeof parsed === 'number' ? numericText(raw, locale) : parsed
+  }
   const [draft, setDraft] = useState(() => asString(p.value))
   const [seen, setSeen] = useState<unknown>(p.value)
   if (!Object.is(seen, p.value)) {
     // Derived-state pattern: adjust during render instead of in an effect (no flash, no loop).
     setSeen(p.value)
-    if (!Object.is(parseTypedNumber(draft, locale), p.value)) setDraft(asString(p.value))
+    if (!Object.is(toValue(draft), p.value)) setDraft(asString(p.value))
   }
   return (
     <input
@@ -117,10 +138,10 @@ export const NumberWidget: Widget = (p) => {
       readOnly={p.readOnly}
       onChange={(e: ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value
-        const parsed = parseTypedNumber(raw, locale)
+        const value = toValue(raw)
         setDraft(raw)
-        setSeen(parsed)
-        p.onChange(parsed)
+        setSeen(value)
+        p.onChange(value)
       }}
     />
   )
