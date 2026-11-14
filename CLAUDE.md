@@ -16,7 +16,7 @@ It is one repo of the **Strutvane** polyrepo ecosystem (one GitHub repo per pack
 
 ## Status
 
-- **Renderer core implemented and tested: `0.1.0-next.0` (changesets pre mode `next`), not released.** It covers ADR-0014's Phase 1 scope: lists, forms, filters, errors and overrides. Routing, layouts, auth screens, themes, the shadcn registry, `@strutvane/ui/vite|installer|testing` and UI-only mode come later.
+- **Renderer core and app shell implemented and tested: `0.1.0-next.0` (changesets pre mode `next`), not released.** It covers ADR-0014's Phase 1 scope (lists, forms, filters, errors, overrides) plus the app shell (`StrutvaneApp.tsx`, `router.tsx`, `ResourceDetail.tsx`, `SignIn.tsx`, `core/session-client.ts`). Full layouts, more auth screens (reset, MFA), themes, the shadcn registry, `@strutvane/ui/vite|installer|testing` and UI-only mode come later.
 - The source of truth for decisions is `../../docs/00-executive-summary.md`. If anything here conflicts with it, that file wins.
 - The package spec is `../../docs/08-package-ui.md`. The key decisions are ADR-0014 (renderer and registries), ADR-0011 (list-query wire format) and RFC-0003 §4 (form failure behaviour).
 - **TEMPORARY:** `pnpm-workspace.yaml` overrides `@strutvane/contracts` to `link:../contracts` until contracts `0.1.0-next.0` is on npm (ADR-0016). Remove the override once it is published.

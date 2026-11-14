@@ -30,7 +30,41 @@ This package renders that UI. It reads the resource manifest (`GET /.well-known/
 
 React 19 and the TanStack packages (Query, Table, Form, Virtual) are **peer dependencies**, needed only for `@strutvane/ui/react`. The only runtime dependency is `@strutvane/contracts`, which is types plus a few constants.
 
-## Quick start
+## Quick start: the whole app
+
+`<StrutvaneApp>` is the complete UI of a Strutvane app (what `web/app.tsx` renders): sign-in,
+workspace picker and switcher, a menu of every resource the user may list, and list, create,
+detail and edit pages for each, all permission-aware and built from the API's manifest.
+
+```tsx
+import { type RouteDefinition, StrutvaneApp } from '@strutvane/ui/react'
+
+const routes: RouteDefinition[] = [{ path: '/reports', title: 'Reports', element: <Reports /> }]
+
+export function App() {
+  return <StrutvaneApp apiUrl={import.meta.env.VITE_API_URL} appName="Acme" routes={routes} />
+}
+```
+
+| Prop | Default | |
+|---|---|---|
+| `apiUrl` | (required) | API base, e.g. `/api/v1`; the manifest is read from the same origin |
+| `appName` | `Strutvane` | Header, document title and sign-in screen |
+| `routes` | `[]` | Your screens (`{ path, element, title? }`, `:params` allowed); they win over resource routes, and those with a `title` appear in the menu |
+| `home` | a welcome | What `/` shows |
+| `overrides`, `locale` | | Widgets, cells and messages (L1/L2), as for `<StrutvaneProvider>` |
+| `auth` | `true` | Use the `@strutvane/auth` session endpoints (`/auth/me`, `/sign-in`, `/tenants`, `/switch-tenant`); `false` for an API without them |
+| `credentials` | `same-origin` | `include` when the UI is served from another origin than the API |
+| `styles` | `true` | Inject `APP_STYLES` (themable through `--sv-*` CSS variables) |
+
+Routes: `/:resource` (list), `/:resource/new`, `/:resource/:id` (detail, with related lists for
+`hasMany` relations whose foreign key is filterable), `/:resource/:id/edit`. A 401 from any request
+returns to the sign-in screen with a notice; unknown paths and resources the user cannot see show
+the same "not found or no access" page. The pieces are exported too: `Router`, `Link`,
+`useRouter`, `matchPath`, `ResourceDetail`, `SignIn`, and `createSessionClient` from
+`@strutvane/ui/core`.
+
+## Quick start: single screens
 
 ```tsx
 import { createHttpClient, fetchManifest } from '@strutvane/ui/core'

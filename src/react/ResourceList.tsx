@@ -103,6 +103,8 @@ export interface ResourceListProps {
   readonly onSearchStringChange?: (search: string) => void
   /** Shows "New …" (when the actor may create). */
   readonly onCreate?: () => void
+  /** Shows a View button per row that opens the record (when the actor may view). */
+  readonly onView?: (record: ApiRecord) => void
   /** Shows an Edit button per row (when the actor may update). */
   readonly onEdit?: (record: ApiRecord) => void
   /**
@@ -126,6 +128,7 @@ export function ResourceList({
   initialSearch = '',
   onSearchStringChange,
   onCreate,
+  onView,
   onEdit,
   confirmDelete,
   onDeleted,
@@ -140,9 +143,13 @@ export function ResourceList({
   const { setSort, setSearch } = list
   const resourceText = resource.pluralLabel.toLowerCase()
 
+  // Report only real state changes: an inline callback (a new function every render) must not
+  // re-fire the effect, or a parent that re-renders on the callback (a router) would loop.
+  const reportSearch = useRef(onSearchStringChange)
+  reportSearch.current = onSearchStringChange
   useEffect(() => {
-    onSearchStringChange?.(list.searchString)
-  }, [list.searchString, onSearchStringChange])
+    reportSearch.current?.(list.searchString)
+  }, [list.searchString])
 
   // Search box: debounced so typing "acme" sends one request, not four.
   const [searchText, setSearchText] = useState(list.state.search)
@@ -245,9 +252,10 @@ export function ResourceList({
   }
 
   const caps = resource.capabilities
+  const canView = caps.view && onView !== undefined
   const canEdit = caps.update && onEdit !== undefined
   const canDelete = caps.delete && confirmDelete !== undefined
-  const hasActions = canEdit || canDelete
+  const hasActions = canView || canEdit || canDelete
   const hasSearch = resource.fields.some((f) => f.searchable)
   const colSpan = fields.length + (hasActions ? 1 : 0)
   const pageInfo = query.data?.meta.page
@@ -368,6 +376,15 @@ export function ResourceList({
                   ))}
                   {hasActions && (
                     <td>
+                      {canView && (
+                        <button
+                          type="button"
+                          aria-label={t('ui.list.view', { title })}
+                          onClick={() => onView?.(row.original)}
+                        >
+                          {t('ui.list.viewShort')}
+                        </button>
+                      )}
                       {canEdit && (
                         <button
                           type="button"

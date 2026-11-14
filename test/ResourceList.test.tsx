@@ -3,6 +3,7 @@
 // Ported from spike 08 (acceptance tests), plus delete gating, error states and the URL rules.
 import { screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'
 import type { ResourceApi } from '../src/core/types.ts'
 import { ResourceList, type ResourceListProps } from '../src/react/ResourceList.tsx'
@@ -369,5 +370,29 @@ describe('accessibility', () => {
     await user.click(screen.getByRole('button', { name: 'Add filter' }))
     await screen.findByRole('alert')
     expect(await axeViolations(container)).toEqual([])
+  })
+})
+
+/** A parent that re-renders on every report, passing a new inline callback each time. */
+function CallbackParent({ calls }: { readonly calls: string[] }) {
+  const [, setTick] = useState(0)
+  return (
+    <ResourceList
+      resource={invoiceResource}
+      onSearchStringChange={(s) => {
+        calls.push(s)
+        setTick((t) => t + 1)
+      }}
+    />
+  )
+}
+
+describe('ResourceList callbacks', () => {
+  test('an inline onSearchStringChange that re-renders the parent fires once per real change', async () => {
+    const calls: string[] = []
+    renderWithUI(<CallbackParent calls={calls} />)
+    await screen.findByRole('table')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(calls.length).toBe(1)
   })
 })

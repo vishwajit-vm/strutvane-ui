@@ -87,6 +87,13 @@ export {
   resolveCell,
   resolveWidget,
 } from './registry.ts'
+export {
+  createSessionClient,
+  type SessionActor,
+  type SessionClient,
+  type SessionClientOptions,
+  type SessionTenant,
+} from './session-client.ts'
 export type { ApiRecord, MutationOptions, ResourceApi } from './types.ts'
 export {
   INTEGER_TYPES,
