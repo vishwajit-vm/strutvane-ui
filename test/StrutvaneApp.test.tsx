@@ -230,6 +230,34 @@ describe('<StrutvaneApp>', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Northwind' })).toBeInTheDocument()
   })
 
+  // A failed workspace switch must be visible, must not become an unhandled promise rejection,
+  // and the automatic selection of the only workspace must be tried once, never in a loop.
+  it.each([
+    [1, 'the automatic selection of the only workspace'],
+    [2, 'a switch the user picked'],
+  ])('a workspace switch the server refuses (%s tenants: %s) is reported once', async (tenants) => {
+    const server = fakeServer({ signedIn: true, tenants, failSwitch: 403 })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      app(server)
+      const user = userEvent.setup()
+      if (tenants > 1) {
+        const select = await screen.findByRole('combobox', { name: 'Workspace' })
+        await user.selectOptions(select, TENANT)
+      }
+      expect(
+        await screen.findByText('Could not switch the workspace. Please try again.'),
+      ).toBeInTheDocument()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(server.calls.filter((c) => c.endsWith('/auth/switch-tenant'))).toHaveLength(1)
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   // Security: a sign-out the server did not confirm must never LOOK like a sign-out. On a shared
   // computer the next person would get the still-valid session by reloading the page.
   it.each([

@@ -242,21 +242,30 @@ function SignedIn(props: SignedInProps): ReactElement {
     }
     props.onSignedOut()
   }
+  // A refused or failed switch (403, offline, 5xx) is shown in the header, never left as an
+  // unhandled promise rejection; the select keeps showing the workspace that is still active.
   const switchTo = useCallback(
     async (tenantId: string) => {
       setSwitching(true)
+      setHeaderError(undefined)
       try {
         props.onActor(await session.switchTenant(tenantId))
+      } catch {
+        setHeaderError(t('ui.app.switchFailed'))
       } finally {
         setSwitching(false)
       }
     },
-    [session, props.onActor],
+    [session, props.onActor, t],
   )
-  // Exactly one workspace and none active yet: select it.
+  // Exactly one workspace and none active yet: select it, ONCE per workspace. Retrying on every
+  // render after a failure would hammer the server (and its rate limiter) in a loop.
   const only = tenants.data?.length === 1 ? tenants.data[0] : undefined
+  const autoSelected = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (only && !actor.tenantId && !switching) void switchTo(only.tenantId)
+    if (!only || actor.tenantId || switching || autoSelected.current === only.tenantId) return
+    autoSelected.current = only.tenantId
+    void switchTo(only.tenantId)
   }, [only, actor.tenantId, switching, switchTo])
 
   const api: ResourceApi = useMemo(

@@ -125,6 +125,7 @@ export const defaultMessages: MessageCatalog = Object.freeze({
   'ui.app.signOutFailed': 'Could not sign out. You are still signed in; please try again.',
   'ui.app.workspace': 'Workspace',
   'ui.app.chooseWorkspace': 'Choose a workspace',
+  'ui.app.switchFailed': 'Could not switch the workspace. Please try again.',
   'ui.app.noWorkspace':
     'Your account is not a member of any workspace yet. Ask an owner to add you.',
   'ui.app.sessionExpired': 'Your session has ended. Please sign in again.',
