@@ -17,7 +17,7 @@ describe('URL round-trip', () => {
     filters: [
       { field: 'number', op: 'contains', value: 'a,b&c=d %25 ü 日本 [x] +' },
       { field: 'status', op: 'in', values: ['draft', 'sent'] },
-      { field: 'amount', op: 'between', from: 0, to: 99.5 },
+      { field: 'amount', op: 'between', from: '0', to: '99.5' },
       { field: 'paid', op: 'eq', value: true },
       { field: 'customer', op: 'eq', value: 'c,1' },
     ],
@@ -238,8 +238,8 @@ describe('listQueryToSearchString (HTTP client wire format)', () => {
 describe('chips survive the URL for every operator', () => {
   const chips: SimpleFilter[] = [
     { field: 'status', op: 'ne', value: 'draft' },
-    { field: 'amount', op: 'gte', value: 5 },
-    { field: 'amount', op: 'lte', value: 7.25 },
+    { field: 'amount', op: 'gte', value: '5' },
+    { field: 'amount', op: 'lte', value: '7.25' },
     { field: 'customer', op: 'in', values: ['c1'] },
     { field: 'number', op: 'eq', value: 'INV-1' },
   ]

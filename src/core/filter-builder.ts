@@ -9,8 +9,14 @@
  *
  * Value rules mirror the server's list-query parser (spike 05) and the policy semantics (ADR-0008):
  * - numbers must be finite (whole numbers for integer fields), booleans are `true`/`false`;
+ * - exact numbers (`decimal`, `money`, `bigInteger`) stay TEXT (`"12345678901234567.89"`):
+ *   they travel as strings on the wire, and a JavaScript number would silently round them, so the
+ *   server would filter on a different value than the one typed (or reject `1e+21`);
+ * - datetimes are ISO-8601 with an explicit offset (`2026-11-14T09:00:00Z`), like the server,
+ *   because a zone-less instant means a different moment in every time zone;
+ * - text lengths are counted in UTF-16 code units, exactly as the server counts them;
  * - ordering operators (`gt`, `gte`, `lt`, `lte`, `between`) only on numeric or temporal fields;
- * - text operators take 1–200 characters; NUL characters are refused everywhere;
+ * - text operators take 1–200 characters (UTF-16 code units); NUL characters are refused everywhere;
  * - `in` / `nin` take 1–100 values, `between` exactly two.
  *
  * @module
@@ -66,11 +72,24 @@ export const FIELD_NAME_PATTERN: RegExp = /^[A-Za-z][A-Za-z0-9_]*$/
 const ORDERING: ReadonlySet<FilterOperator> = new Set(['gt', 'gte', 'lt', 'lte', 'between'])
 const TEXT_OPS: ReadonlySet<FilterOperator> = new Set(['contains', 'startsWith', 'endsWith'])
 const MAX_TEXT_LENGTH = 200
+/** Numeric types exchanged as exact text (decimals and 64-bit integers): never parsed to a number. */
+const EXACT_NUMBER_TYPES: ReadonlySet<string> = new Set(['decimal', 'money', 'bigInteger'])
+const EXACT_DECIMAL = /^-?\d+(\.\d+)?$/
+const EXACT_INTEGER = /^-?\d+$/
+/** ISO-8601 instant with an explicit offset (the server's datetime filter format). */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}(:?\d{2})?)$/
+const INSTANT_TYPES: ReadonlySet<string> = new Set(['datetime', 'timestamp'])
 const MAX_SET_SIZE = 100
 
 /** Convert one raw string to the field's type, or `undefined` if it does not fit. */
 export function coerceFilterValue(field: FieldDescriptor, raw: string): FilterValue | undefined {
   if (raw.includes('\u0000')) return undefined
+  if (EXACT_NUMBER_TYPES.has(field.type)) {
+    const text = raw.trim()
+    return (field.type === 'bigInteger' ? EXACT_INTEGER : EXACT_DECIMAL).test(text)
+      ? text
+      : undefined
+  }
   if (NUMERIC_TYPES.has(field.type)) {
     if (raw.trim() === '') return undefined
     const n = Number(raw)
@@ -81,6 +100,8 @@ export function coerceFilterValue(field: FieldDescriptor, raw: string): FilterVa
   }
   if (field.type === 'boolean') return raw === 'true' ? true : raw === 'false' ? false : undefined
   if (field.type === 'date') return isIsoDate(raw) ? raw : undefined
+  if (INSTANT_TYPES.has(field.type))
+    return ISO_INSTANT.test(raw) && Number.isFinite(Date.parse(raw)) ? raw : undefined
   if (TEMPORAL_TYPES.has(field.type))
     return raw !== '' && Number.isFinite(Date.parse(raw)) ? raw : undefined
   if (field.type === 'enum' || field.type === 'set') {
@@ -118,7 +139,8 @@ export function buildFilter(
     case 'endsWith': {
       const [value] = values
       if (values.length !== 1 || value === undefined) return fail('wrong_value_count')
-      if (value === '' || [...value].length > MAX_TEXT_LENGTH || value.includes('\u0000')) {
+      // UTF-16 length, like the server: an emoji counts twice there, so it must here too.
+      if (value === '' || value.length > MAX_TEXT_LENGTH || value.includes('\u0000')) {
         return fail('invalid_value')
       }
       return { ok: true, filter: { field: name, op, value } }

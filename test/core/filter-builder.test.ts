@@ -1,6 +1,7 @@
 // The ONE filter builder: rejects fields and operators the descriptor does not allow, and values
 // that do not fit the field's type. URL parsing and the filter bar both depend on these rules.
 import type { FieldDescriptor } from '@strutvane/contracts'
+import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
 import {
   buildFilter,
@@ -94,7 +95,7 @@ describe('buildFilter rejects what the descriptor does not allow', () => {
     })
   })
 
-  test('text operators: 1–200 characters (code points), no NUL', () => {
+  test('text operators: 1–200 characters (UTF-16 code units, like the server), no NUL', () => {
     expect(buildFilter(f('number'), 'contains', [''])).toEqual({
       ok: false,
       reason: 'invalid_value',
@@ -103,7 +104,7 @@ describe('buildFilter rejects what the descriptor does not allow', () => {
       ok: false,
       reason: 'invalid_value',
     })
-    expect(buildFilter(f('number'), 'contains', ['😀'.repeat(200)]).ok).toBe(true)
+    expect(buildFilter(f('number'), 'contains', ['😀'.repeat(100)]).ok).toBe(true)
     expect(buildFilter(f('number'), 'contains', ['a\u0000'])).toEqual({
       ok: false,
       reason: 'invalid_value',
@@ -130,8 +131,8 @@ describe('buildFilter rejects what the descriptor does not allow', () => {
 
 describe('buildFilter accepts and types valid input', () => {
   test.each([
-    ['amount', 'gte', ['10.5'], { field: 'amount', op: 'gte', value: 10.5 }],
-    ['amount', 'between', ['1', '2'], { field: 'amount', op: 'between', from: 1, to: 2 }],
+    ['amount', 'gte', ['10.5'], { field: 'amount', op: 'gte', value: '10.5' }],
+    ['amount', 'between', ['1', '2'], { field: 'amount', op: 'between', from: '1', to: '2' }],
     ['paid', 'eq', ['false'], { field: 'paid', op: 'eq', value: false }],
     ['status', 'in', ['draft', 'sent'], { field: 'status', op: 'in', values: ['draft', 'sent'] }],
     ['dueDate', 'lte', ['2026-12-31'], { field: 'dueDate', op: 'lte', value: '2026-12-31' }],
@@ -203,6 +204,76 @@ describe('helpers', () => {
         { op: 'eq', field: 'a', value: 1 },
         { op: 'between', field: 'b', from: 1, to: 2 },
       ],
+    })
+  })
+})
+
+// The server's list-query parser is the authority: a value the UI accepts must reach the server
+// unchanged and be accepted there (framework `filterValue`, ADR-0011). These tests pin the class.
+describe('buildFilter mirrors the server value rules', () => {
+  const typed = (type: string) =>
+    field({ name: 'v', type, label: 'V', filterOperators: ['eq', 'in', 'between', 'gte'] })
+
+  test('exact numbers (decimal, money, bigInteger) stay exact text, never a rounded float', () => {
+    expect(buildFilter(typed('bigInteger'), 'eq', ['9007199254740993'])).toEqual({
+      ok: true,
+      filter: { field: 'v', op: 'eq', value: '9007199254740993' },
+    })
+    expect(buildFilter(typed('decimal'), 'gte', ['12345678901234567.89'])).toEqual({
+      ok: true,
+      filter: { field: 'v', op: 'gte', value: '12345678901234567.89' },
+    })
+    expect(buildFilter(typed('money'), 'in', ['0.10', ' 2 '])).toEqual({
+      ok: true,
+      filter: { field: 'v', op: 'in', values: ['0.10', '2'] },
+    })
+    expect(buildFilter(typed('decimal'), 'between', ['-1', '1.5'])).toEqual({
+      ok: true,
+      filter: { field: 'v', op: 'between', from: '-1', to: '1.5' },
+    })
+  })
+
+  test.each([
+    ['decimal', '1e21'],
+    ['decimal', '0x10'],
+    ['decimal', '1.'],
+    ['decimal', '.5'],
+    ['decimal', 'Infinity'],
+    ['decimal', '1,5'],
+    ['decimal', '+1'],
+    ['decimal', ''],
+    ['bigInteger', '1.5'],
+    ['bigInteger', '1e3'],
+    ['money', 'NaN'],
+  ])('%s refuses %j (the server would reject it, or read a different value)', (type, raw) => {
+    expect(buildFilter(typed(type), 'eq', [raw])).toEqual({ ok: false, reason: 'invalid_value' })
+  })
+
+  test('property: any exact decimal round-trips through the filter builder digit for digit', () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^-?\d{1,30}(\.\d{1,12})?$/), (text) => {
+        const built = buildFilter(typed('decimal'), 'eq', [text])
+        expect(built).toEqual({ ok: true, filter: { field: 'v', op: 'eq', value: text } })
+        if (built.ok) expect(filterToRawValues(built.filter)).toEqual([text])
+      }),
+      { numRuns: 300 },
+    )
+  })
+
+  test('datetimes need ISO-8601 with an explicit offset, like the server', () => {
+    const at = typed('datetime')
+    for (const ok of ['2026-11-14T09:00:00Z', '2026-11-14T09:00:00.123+05:30', '2026-11-14T09:00Z'])
+      expect(buildFilter(at, 'gte', [ok]).ok).toBe(true)
+    for (const bad of ['Nov 14 2026', '2026-11-14', '2026-11-14T09:00:00', '1731574800000'])
+      expect(buildFilter(at, 'gte', [bad])).toEqual({ ok: false, reason: 'invalid_value' })
+  })
+
+  test('text values are measured in UTF-16 code units, like the server (an emoji counts 2)', () => {
+    const text = field({ name: 't', type: 'string', label: 'T', filterOperators: ['contains'] })
+    expect(buildFilter(text, 'contains', ['😀'.repeat(100)]).ok).toBe(true)
+    expect(buildFilter(text, 'contains', ['😀'.repeat(101)])).toEqual({
+      ok: false,
+      reason: 'invalid_value',
     })
   })
 })

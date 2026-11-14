@@ -137,8 +137,8 @@ describe('ResourceList → ListQuery', () => {
       expect(lastQuery(api)?.filter).toEqual({
         op: 'between',
         field: 'amount',
-        from: 10,
-        to: 99.5,
+        from: '10',
+        to: '99.5',
       }),
     )
     expect(screen.getByRole('list', { name: 'Active filters' })).toHaveTextContent(
