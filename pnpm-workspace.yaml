@@ -1,7 +1,5 @@
+# Our own pre-releases are staged and approved with 2FA (ADR-0018), so they are exempt from
+# pnpm's minimum release age; every third-party package keeps the protection.
 minimumReleaseAgeExclude:
+  - "@strutvane/*"
   - jsdom@31.0.1
-# TEMPORARY (ADR-0016): @strutvane/contracts@0.1.0-next.0 is not on npm yet, so it is linked to the
-# sibling checkout in the umbrella folder. Remove this override once it is published; the CI guard
-# (.github/scripts/check-deps.mjs) refuses to release while it is present.
-overrides:
-  "@strutvane/contracts": link:../contracts

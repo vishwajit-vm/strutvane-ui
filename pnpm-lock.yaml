@@ -162,16 +162,13 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@strutvane/contracts': link:../contracts
-
 importers:
 
   .:
     dependencies:
       '@strutvane/contracts':
-        specifier: link:../contracts
-        version: link:../contracts
+        specifier: 0.1.0-next.0
+        version: 0.1.0-next.0
     devDependencies:
       '@biomejs/biome':
         specifier: 2.6.7
@@ -676,6 +673,10 @@ packages:
 
   '@rolldown/pluginutils@1.1.0':
     resolution: {integrity: sha512-K+NU2HDCEem4sClgHH4ZZXwdJeNFkJo+hRk479DIwdIviAPN2hFJH1KHHwg8CxHQXvi0M5XY4deTXINfIiSG6w==}
+
+  '@strutvane/contracts@0.1.0-next.0':
+    resolution: {integrity: sha512-Uby7JdYJED6BPI44lXMsw4brpUjgQ9RL+4KuU3VyMuPBgnKY8zuDpy0leSkZOZNif2r3iX6GauzyHqhOlGzW4w==}
+    engines: {node: '>=24'}
 
   '@tanstack/devtools-event-client@0.4.4':
     resolution: {integrity: sha512-6T5Yop/793YI+H+5J8Hsyj4kCih9sl4t3ElLgKioW5hk3ocn+ZdSJ94tT7vL7uabxSugWYBZlOTMPzEw2puvQw==}
@@ -1835,6 +1836,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.1.0': {}
+
+  '@strutvane/contracts@0.1.0-next.0': {}
 
   '@tanstack/devtools-event-client@0.4.4': {}
 
