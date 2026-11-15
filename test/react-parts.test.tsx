@@ -18,11 +18,13 @@ import {
 import { useResource, useStrutvane } from '../src/react/context.ts'
 import { FieldShell } from '../src/react/FieldShell.tsx'
 import { describeFilter, rawFilterValues } from '../src/react/FilterBar.tsx'
+import { detailFields } from '../src/react/ResourceDetail.tsx'
 import {
   emptyValue,
   formFields,
   keepIdempotencyKey,
   orderedFieldNames,
+  ResourceForm,
 } from '../src/react/ResourceForm.tsx'
 import { listFields } from '../src/react/ResourceList.tsx'
 import { recordTitle, relationId } from '../src/react/relations.ts'
@@ -39,7 +41,8 @@ import {
   TextareaWidget,
   TextWidget,
 } from '../src/react/widgets.tsx'
-import { field, invoiceResource, manifest } from './fixtures/manifest.ts'
+import { FakeApi } from './fixtures/fake-api.ts'
+import { field, invoiceResource, manifest, resource } from './fixtures/manifest.ts'
 import { renderWithUI, seededApi } from './helpers.tsx'
 
 const t = (key: string, params = {}) => formatMessage(defaultMessages, key, params)
@@ -389,5 +392,60 @@ describe('useListQuery', () => {
       useListQuery(invoiceResource, 'page[size]=10', { pageSize: 50 }),
     )
     expect(result.current.state.pageSize).toBe(10)
+  })
+})
+
+describe('relation collections have no value of their own on the record', () => {
+  // What the framework's manifest emits for `relations: { invoices: hasMany(...) }`: a read-only
+  // field with no value in any API record. It must never become an always-empty column or input.
+  const owner = resource({
+    name: 'Owner',
+    path: 'owners',
+    titleField: 'name',
+    fields: [
+      field({ name: 'id', type: 'id', label: 'ID', readOnly: true }),
+      field({ name: 'name', type: 'string', label: 'Name' }),
+      ...(['hasMany', 'hasOne', 'manyToMany'] as const).map((kind) =>
+        field({
+          name: `${kind}Rel`,
+          type: kind,
+          label: kind,
+          readOnly: true,
+          relation: { kind, target: 'Invoice', foreignKey: 'ownerId' },
+        }),
+      ),
+    ],
+  })
+
+  test.each(['hasMany', 'hasOne', 'manyToMany'])(
+    '%s is not a list column, form field or detail field',
+    () => {
+      expect(listFields(owner).map((f) => f.name)).toEqual(['name'])
+      expect(formFields(owner, 'create').map((f) => f.field.name)).toEqual(['name'])
+      expect(formFields(owner, 'edit').map((f) => f.field.name)).toEqual(['name'])
+      expect(detailFields(owner).map((f) => f.name)).toEqual(['id', 'name'])
+    },
+  )
+
+  test('an explicit ui.listColumns entry is still honoured (the app asked for it)', () => {
+    expect(
+      listFields({ ...owner, ui: { listColumns: ['name', 'hasManyRel'] } }).map((f) => f.name),
+    ).toEqual(['name', 'hasManyRel'])
+  })
+
+  test('the edit form renders no empty read-only input for the relation', async () => {
+    const api = new FakeApi(
+      { ...manifest, resources: [...manifest.resources, owner] },
+      {
+        owners: [{ id: 'o1', name: 'Olga' }],
+      },
+    )
+    renderWithUI(<ResourceForm resource={owner} recordId="o1" />, {
+      api,
+      manifest: { ...manifest, resources: [...manifest.resources, owner] },
+    })
+    expect(await screen.findByLabelText('Name')).toHaveValue('Olga')
+    expect(screen.queryByLabelText('hasMany')).toBeNull()
+    expect(screen.queryByLabelText('manyToMany')).toBeNull()
   })
 })

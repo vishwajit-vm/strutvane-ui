@@ -18,6 +18,7 @@ import { type ReactElement, useId, useState } from 'react'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
+import { COLLECTION_RELATION_TYPES } from '../core/validation.ts'
 import { CellFallback } from './cells.tsx'
 import { useStrutvane } from './context.ts'
 import { RenderBoundary } from './RenderBoundary.tsx'
@@ -39,7 +40,9 @@ export interface ResourceDetailProps {
 
 /** Fields shown in the description list (relations are rendered as related lists instead). */
 export function detailFields(resource: ResourceDescriptor): FieldDescriptor[] {
-  return resource.fields.filter((f) => f.type !== 'hasMany' && f.type !== 'password')
+  return resource.fields.filter(
+    (f) => !COLLECTION_RELATION_TYPES.has(f.type) && f.type !== 'password',
+  )
 }
 
 /** The detail page for one record. */

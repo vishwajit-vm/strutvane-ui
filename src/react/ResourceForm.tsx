@@ -49,7 +49,12 @@ import {
 } from '../core/problems.ts'
 import { resolveWidget } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
-import { itemFieldDescriptor, itemProperties, validateField } from '../core/validation.ts'
+import {
+  COLLECTION_RELATION_TYPES,
+  itemFieldDescriptor,
+  itemProperties,
+  validateField,
+} from '../core/validation.ts'
 import { useStrutvane } from './context.ts'
 import { errorMessages, FieldShell } from './FieldShell.tsx'
 
@@ -110,7 +115,13 @@ export interface FormField {
 /** Fields the form renders, and whether each is editable, for a given mode. */
 export function formFields(resource: ResourceDescriptor, mode: Mode): FormField[] {
   return resource.fields
-    .filter((f) => f.type !== 'id' && f.type !== 'password' && !(mode === 'create' && f.readOnly))
+    .filter(
+      (f) =>
+        f.type !== 'id' &&
+        f.type !== 'password' &&
+        !COLLECTION_RELATION_TYPES.has(f.type) &&
+        !(mode === 'create' && f.readOnly),
+    )
     .map((f) => ({ field: f, readOnly: f.readOnly || (mode === 'edit' && f.writeOnce) }))
 }
 

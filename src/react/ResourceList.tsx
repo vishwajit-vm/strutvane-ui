@@ -41,6 +41,7 @@ import { createIdempotencyKey } from '../core/ids.ts'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
+import { COLLECTION_RELATION_TYPES } from '../core/validation.ts'
 import { CellFallback } from './cells.tsx'
 import { useStrutvane } from './context.ts'
 import { FilterBar } from './FilterBar.tsx'
@@ -74,7 +75,9 @@ export function listFields(resource: ResourceDescriptor): FieldDescriptor[] {
   const explicit = resource.ui?.listColumns
   if (explicit)
     return explicit.map((n) => byName.get(n)).filter((f): f is FieldDescriptor => f !== undefined)
-  return resource.fields.filter((f) => !NOT_LISTED.has(f.type)).slice(0, DEFAULT_COLUMNS)
+  return resource.fields
+    .filter((f) => !NOT_LISTED.has(f.type) && !COLLECTION_RELATION_TYPES.has(f.type))
+    .slice(0, DEFAULT_COLUMNS)
 }
 
 const toSorting = (sort: readonly SortDirective[]): SortingState =>

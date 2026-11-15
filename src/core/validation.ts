@@ -27,6 +27,17 @@ export const NUMERIC_TYPES: ReadonlySet<string> = new Set([
 /** Numeric field types that only accept whole numbers. */
 export const INTEGER_TYPES: ReadonlySet<string> = new Set(['integer', 'bigInteger'])
 
+/**
+ * Relation fields that have NO value of their own on the record (`hasMany`, `hasOne`,
+ * `manyToMany`: the rows live on the other side). The API never returns a value for them, so they
+ * are never list columns or form inputs; the detail page renders them as related lists instead.
+ */
+export const COLLECTION_RELATION_TYPES: ReadonlySet<string> = new Set([
+  'hasMany',
+  'hasOne',
+  'manyToMany',
+])
+
 /** Field types whose values are dates or times (ordering is meaningful). */
 export const TEMPORAL_TYPES: ReadonlySet<string> = new Set([
   'date',
