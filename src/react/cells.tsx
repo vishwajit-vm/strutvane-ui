@@ -95,6 +95,26 @@ export const DateCell: Cell = ({ value }) => {
   return <time dateTime={value}>{text}</time>
 }
 
+/**
+ * Datetimes (an instant, ISO-8601 with an offset): shown in the VIEWER's time zone and locale, with
+ * the exact instant kept in `<time dateTime>`. Unparseable values are shown as-is.
+ */
+export const DateTimeCell: Cell = ({ value }) => {
+  const { t, locale } = useStrutvane()
+  if (typeof value !== 'string' || value === '') return <>{t('ui.cell.empty')}</>
+  const instant = new Date(value)
+  if (Number.isNaN(instant.getTime())) return <>{value}</>
+  let text = value
+  try {
+    text = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+      instant,
+    )
+  } catch {
+    // keep the ISO text
+  }
+  return <time dateTime={value}>{text}</time>
+}
+
 /** belongsTo: the related record's title (batched lookup), falling back to the raw id. */
 export const RelationCell: Cell = ({ field, value }) => {
   const { t } = useStrutvane()
@@ -133,6 +153,8 @@ export const defaultCells: Readonly<Record<string, Cell>> = Object.freeze({
   decimal: DecimalCell,
   money: DecimalCell,
   date: DateCell,
+  datetime: DateTimeCell,
+  timestamp: DateTimeCell,
   belongsTo: RelationCell,
   array: ArrayCell,
   json: JsonCell,

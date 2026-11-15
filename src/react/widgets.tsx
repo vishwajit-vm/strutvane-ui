@@ -244,6 +244,41 @@ export const DateWidget: Widget = (p) => (
   />
 )
 
+const pad = (n: number, width = 2) => String(n).padStart(width, '0')
+
+/** An ISO instant as the `datetime-local` text for the viewer's time zone; `''` if not an instant. */
+export function toLocalInput(value: unknown): string {
+  if (typeof value !== 'string' || value === '') return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const date = `${pad(d.getFullYear(), 4)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const seconds = d.getSeconds() !== 0 || d.getMilliseconds() !== 0 ? `:${pad(d.getSeconds())}` : ''
+  return `${date}T${pad(d.getHours())}:${pad(d.getMinutes())}${seconds}`
+}
+
+/** `datetime-local` text (the viewer's wall clock) as an ISO instant in UTC; `null` when empty. */
+export function fromLocalInput(raw: string): string | null {
+  if (raw === '') return null
+  const d = new Date(raw) // no offset in the text: the browser reads it in the local time zone
+  return Number.isNaN(d.getTime()) ? raw : d.toISOString()
+}
+
+/**
+ * Datetimes: the native `datetime-local` input, shown in the viewer's time zone and sent as an
+ * ISO-8601 instant in UTC (`2026-11-14T08:30:00.000Z`), the format the API requires. Without the
+ * conversion the input would show (and send back) the server's UTC wall clock as if it were local.
+ */
+export const DateTimeWidget: Widget = (p) => (
+  <input
+    {...common(p)}
+    type="datetime-local"
+    step={1}
+    value={toLocalInput(p.value)}
+    readOnly={p.readOnly}
+    onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(fromLocalInput(e.target.value))}
+  />
+)
+
 /** Read-only display of any value (computed fields, or any field an app wants shown, not edited). */
 export const ReadOnlyWidget: Widget = (p) => (
   <input {...common(p)} type="text" value={asString(p.value)} readOnly onChange={() => {}} />
@@ -332,6 +367,8 @@ export const defaultWidgets: Readonly<Record<string, Widget>> = Object.freeze({
   enum: SelectWidget,
   boolean: CheckboxWidget,
   date: DateWidget,
+  datetime: DateTimeWidget,
+  timestamp: DateTimeWidget,
   json: JsonWidget,
   computed: ReadOnlyWidget,
   readonly: ReadOnlyWidget,

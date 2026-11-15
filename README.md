@@ -100,7 +100,7 @@ export function App() {
 
 **Lists (`<ResourceList>`)**
 
-- Columns from `ui.listColumns` (or up to six sensible fields). Cells per field type: numbers and dates through `Intl`, Yes/No, relation titles.
+- Columns from `ui.listColumns` (or up to six sensible fields). Cells per field type: numbers, dates and datetimes (in the viewer's time zone) through `Intl`, Yes/No, relation titles.
 - Filtering, search, sorting and pagination all **run on the server**. The table never sorts or filters locally.
 - **Sorting:** the first click is always ascending, on every column.
 - **Filter chips:** you can only pick a field's allowed operators, and every value is validated before it is sent.
@@ -115,7 +115,7 @@ export function App() {
   - text, email, URL and phone
   - textarea
   - number and decimal: what you typed is kept, so `1250.` is not swallowed, and the locale's decimal comma is accepted
-  - enum select, checkbox and date
+  - enum select, checkbox, date, and datetime (shown and edited in the viewer's time zone, sent as an ISO-8601 instant in UTC)
   - JSON (`type: "json"`): a textarea whose text is parsed, so the API receives the JSON value itself, never the text as a string; text that does not parse is refused before sending
   - a read-only display
   - a **belongsTo picker** that searches on the server and pages 100 records at a time with "Load more", so every record is reachable

@@ -14,6 +14,7 @@ export {
   ArrayCell,
   BooleanCell,
   DateCell,
+  DateTimeCell,
   DecimalCell,
   DefaultCell,
   defaultCells,
@@ -74,8 +75,10 @@ export type { Cell, CellProps, UiOverrides, UiRegistry, Widget, WidgetProps } fr
 export { type UseListQueryOptions, type UseListQueryResult, useListQuery } from './useListQuery.ts'
 export {
   CheckboxWidget,
+  DateTimeWidget,
   DateWidget,
   defaultWidgets,
+  fromLocalInput,
   JsonWidget,
   NumberWidget,
   numericText,
@@ -85,4 +88,5 @@ export {
   SelectWidget,
   TextareaWidget,
   TextWidget,
+  toLocalInput,
 } from './widgets.tsx'
