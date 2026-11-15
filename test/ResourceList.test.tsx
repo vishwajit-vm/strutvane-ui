@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ResourceList driven like a user would: assert what is shown AND which ListQuery reached the API.
 // Ported from spike 08 (acceptance tests), plus delete gating, error states and the URL rules.
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'
@@ -394,5 +394,55 @@ describe('ResourceList callbacks', () => {
     await screen.findByRole('table')
     await new Promise((r) => setTimeout(r, 50))
     expect(calls.length).toBe(1)
+  })
+})
+
+/** A router stand-in: holds the URL search string and lets the test change it from outside. */
+const url = { set: (_search: string) => {} }
+function UrlHarness(props: { readonly initial: string; readonly onReport: (s: string) => void }) {
+  const [search, setSearch] = useState(props.initial)
+  url.set = setSearch
+  return (
+    <ResourceList
+      resource={invoiceResource}
+      initialSearch={search}
+      onSearchStringChange={props.onReport}
+      pageSize={50}
+    />
+  )
+}
+
+describe('the list follows URL changes made outside it (menu link, back/forward)', () => {
+  // The router passes the CURRENT URL; the list used to read it only at mount, so clicking the menu
+  // entry of the list you are on (or Back) changed the URL while the list kept its old filters.
+  test('a new URL replaces the list state; the URL the list itself reported changes nothing', async () => {
+    const api = seededApi()
+    const reported: string[] = []
+    renderWithUI(
+      <UrlHarness
+        initial="filter[status][eq]=paid&search=INV"
+        onReport={(s) => reported.push(s)}
+      />,
+      { api },
+    )
+    await screen.findByText('Showing 10 invoices')
+    expect(screen.getByRole('searchbox')).toHaveValue('INV')
+    // What the list reported comes back from the router: no reset, no extra request.
+    const requests = api.requests.length
+    act(() => url.set(reported.at(-1) ?? ''))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(api.requests.length).toBe(requests)
+    // A different URL from outside (the menu link `/invoices`): the list resets to it.
+    act(() => url.set(''))
+    await screen.findByText('Showing 30 invoices')
+    expect(lastQuery(api)?.filter).toBeUndefined()
+    expect(lastQuery(api)?.search).toBeUndefined()
+    expect(lastQuery(api)?.page).toEqual({ kind: 'cursor', size: 50 }) // the pageSize prop still applies
+    expect(screen.queryByRole('list', { name: 'Active filters' })).toBeNull()
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    // And Back to the filtered URL restores it.
+    act(() => url.set('filter[status][eq]=paid'))
+    await screen.findByText('Showing 10 invoices')
+    expect(lastQuery(api)?.filter).toEqual({ op: 'eq', field: 'status', value: 'paid' })
   })
 })

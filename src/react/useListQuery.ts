@@ -8,7 +8,7 @@
  * @module
  */
 import type { ListQuery, ResourceDescriptor, SortDirective } from '@strutvane/contracts'
-import { useCallback, useMemo, useReducer } from 'react'
+import { useCallback, useMemo, useReducer, useState } from 'react'
 import type { SimpleFilter } from '../core/filter-builder.ts'
 import { parseSearchString, type RejectedParam, toSearchString } from '../core/list-query-url.ts'
 import {
@@ -27,6 +27,8 @@ export interface UseListQueryResult {
   /** URL parameters dropped at mount (unknown field, operator not allowed, bad value…). */
   readonly rejected: readonly RejectedParam[]
   readonly hasPrevious: boolean
+  /** Increases each time the state was reset from a new URL (inputs mirroring it resync then). */
+  readonly generation: number
   readonly setSort: (sort: readonly SortDirective[]) => void
   readonly addFilter: (filter: SimpleFilter) => void
   readonly removeFilter: (index: number) => void
@@ -48,19 +50,37 @@ export function useListQuery(
   initialSearch = '',
   options: UseListQueryOptions = {},
 ): UseListQueryResult {
-  // The URL is read once at mount; afterwards this hook owns the state and reports it back.
+  // This hook owns the state and reports it back as `searchString`. When the router hands in a
+  // DIFFERENT URL than the one reported (a menu link to this list, Back/Forward), the state is reset
+  // to that URL; the URL it reported itself comes back unchanged and changes nothing.
   const initial = useMemo(
     () => parseSearchString(initialSearch, resource),
     [initialSearch, resource],
   )
-  const [state, dispatch] = useReducer(listReducer, undefined, (): ListPageState => {
-    const urlHasSize = new URLSearchParams(initialSearch).has('page[size]')
+  const fromUrl = (parsed: typeof initial, search: string): ListState => {
+    const urlHasSize = new URLSearchParams(search).has('page[size]')
     const pageSize =
       urlHasSize || options.pageSize === undefined
-        ? initial.state.pageSize
+        ? parsed.state.pageSize
         : clampPageSize(options.pageSize)
-    return { list: { ...initial.state, pageSize }, previousCursors: [] }
-  })
+    return { ...parsed.state, pageSize }
+  }
+  const [state, dispatch] = useReducer(
+    listReducer,
+    undefined,
+    (): ListPageState => ({ list: fromUrl(initial, initialSearch), previousCursors: [] }),
+  )
+  const [seenSearch, setSeenSearch] = useState(initialSearch)
+  const [generation, setGeneration] = useState(0)
+  if (seenSearch !== initialSearch) {
+    // Derived-state pattern: adjust during render, no effect round trip and no flash.
+    setSeenSearch(initialSearch)
+    const next = fromUrl(initial, initialSearch)
+    if (toSearchString(next) !== toSearchString(state.list)) {
+      dispatch({ type: 'reset', list: next })
+      setGeneration((g) => g + 1)
+    }
+  }
   const listQuery = useMemo(() => toListQuery(state.list), [state.list])
   const searchString = useMemo(() => toSearchString(state.list), [state.list])
   return {
@@ -68,6 +88,7 @@ export function useListQuery(
     listQuery,
     searchString,
     rejected: initial.rejected,
+    generation,
     hasPrevious: state.previousCursors.length > 0,
     setSort: useCallback((sort: readonly SortDirective[]) => dispatch({ type: 'sort', sort }), []),
     addFilter: useCallback((filter: SimpleFilter) => dispatch({ type: 'addFilter', filter }), []),

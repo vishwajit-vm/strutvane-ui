@@ -159,6 +159,12 @@ export function ResourceList({
   // Search box: debounced so typing "acme" sends one request, not four.
   const [searchText, setSearchText] = useState(list.state.search)
   const debouncedSearch = useDebouncedValue(searchText, SEARCH_DEBOUNCE_MS)
+  // The URL was replaced from outside: the search box shows the new URL's text.
+  const [seenGeneration, setSeenGeneration] = useState(list.generation)
+  if (seenGeneration !== list.generation) {
+    setSeenGeneration(list.generation)
+    setSearchText(list.state.search)
+  }
   useEffect(() => setSearch(debouncedSearch), [debouncedSearch, setSearch])
 
   const query = useQuery({
