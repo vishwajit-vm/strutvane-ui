@@ -208,6 +208,14 @@ describe('parseManifest', () => {
     if (!result.ok) expect(result.errors.join('\n')).toContain(message)
   })
 
+  test('resource paths are stored without surrounding slashes (links never become //host)', () => {
+    const m = clone()
+    firstResource(m)['path'] = '/evil.example/x/'
+    const result = parseManifest(m)
+    if (!result.ok) throw new Error(result.errors.join('; '))
+    expect(result.manifest.resources[0]?.path).toBe('evil.example/x')
+  })
+
   test('valid actions and ui hints are kept', () => {
     const m = clone()
     firstResource(m)['actions'] = [

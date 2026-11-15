@@ -207,6 +207,9 @@ function parseResource(c: Checker, raw: unknown, at: string): ResourceDescriptor
     !/^\/?[A-Za-z0-9][A-Za-z0-9._~/-]*$/.test(path) ||
     path.split('/').some((segment) => segment === '.' || segment === '..')
   if (path && unsafe) c.errors.push(`${at}.path "${path}" is not a safe path`)
+  // Stored without surrounding slashes: the UI builds links as `/${path}`, and a leading slash
+  // there would make `//host/…`, a protocol-relative link to ANOTHER site.
+  const cleanPath = path.replace(/^\/+|\/+$/g, '')
   const uiRaw = raw['ui']
   let ui: ResourceDescriptor['ui']
   if (isRec(uiRaw)) {
@@ -222,7 +225,7 @@ function parseResource(c: Checker, raw: unknown, at: string): ResourceDescriptor
   }
   return {
     name: c.str(raw, 'name', at),
-    path,
+    path: cleanPath,
     label: c.str(raw, 'label', at),
     pluralLabel: c.str(raw, 'pluralLabel', at),
     titleField,

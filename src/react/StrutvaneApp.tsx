@@ -429,6 +429,33 @@ function Nav(props: {
   )
 }
 
+/**
+ * The resource a URL belongs to: the one whose path (one or more segments, e.g. `admin/accounts`)
+ * is the longest prefix of the URL, plus the remaining segments DECODED (`/:id`, `/:id/edit`).
+ * Ids are encoded once when links are built, so they must be decoded once here; otherwise an id
+ * such as `a b` reaches the API encoded twice (`a%2520b`). A malformed encoding matches nothing.
+ */
+function matchResource(
+  resources: readonly ResourceDescriptor[],
+  segments: readonly string[],
+): { readonly resource: ResourceDescriptor; readonly rest: readonly string[] } | undefined {
+  let best: ResourceDescriptor | undefined
+  let length = 0
+  for (const r of resources) {
+    const parts = r.path.split('/').filter(Boolean)
+    if (parts.length > length && parts.every((part, i) => segments[i] === part)) {
+      best = r
+      length = parts.length
+    }
+  }
+  if (!best) return undefined
+  try {
+    return { resource: best, rest: segments.slice(length).map((s) => decodeURIComponent(s)) }
+  } catch {
+    return undefined
+  }
+}
+
 /** The page for the current path. */
 function Pages(props: SignedInProps & { readonly manifest: ResourceManifest }): ReactElement {
   const { pathname, search, navigate } = useRouter()
@@ -449,14 +476,15 @@ function Pages(props: SignedInProps & { readonly manifest: ResourceManifest }): 
       </>
     )
   }
-  const resource = props.manifest.resources.find((r) => r.path === segments[0])
   const notFound = <p role="alert">{t('ui.app.notFound')}</p>
-  if (!resource || segments.length > 3) return notFound
+  const match = matchResource(props.manifest.resources, segments)
+  if (!match || match.rest.length > 2) return notFound
+  const { resource } = match
   const base = `/${resource.path}`
   const open = (r: ApiRecord) => navigate(`${base}/${encodeURIComponent(r.id)}`)
   const confirmDelete = (r: ApiRecord) =>
     window.confirm(t('ui.list.confirmDelete', { title: String(r[resource.titleField] ?? r.id) }))
-  const [, id, action] = segments
+  const [id, action] = match.rest
   if (id === undefined) {
     return (
       <ResourceList

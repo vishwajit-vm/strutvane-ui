@@ -310,6 +310,77 @@ describe('<StrutvaneApp>', () => {
   })
 })
 
+describe('URLs built from record ids and manifest paths', () => {
+  it('a record id is decoded from the URL once, so the API gets it encoded once', async () => {
+    const server = fakeServer({ signedIn: true })
+    app(server)
+    await settled(server)
+    await screen.findByRole('heading', { name: 'Welcome to Northwind' })
+    window.history.pushState(null, '', `/customers/${encodeURIComponent('a b/ü')}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() =>
+      expect(server.calls).toContain(`GET /api/v1/customers/${encodeURIComponent('a b/ü')}`),
+    )
+    expect(server.calls.some((c) => c.includes('%25'))).toBe(false)
+  })
+
+  it('a malformed percent-encoding in the URL shows "not found", never a crash', async () => {
+    const server = fakeServer({ signedIn: true })
+    app(server)
+    await settled(server)
+    await screen.findByRole('heading', { name: 'Welcome to Northwind' })
+    window.history.pushState(null, '', '/customers/%E0%A4%A')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(await screen.findByText(/does not exist, or you do not have access/)).toBeInTheDocument()
+  })
+
+  it('manifest paths: a leading slash never yields a protocol-relative (off-site) link; nested paths route', async () => {
+    const server = fakeServer({ signedIn: true })
+    const base = server.fetch
+    const nested = {
+      ...manifest,
+      resources: [
+        {
+          ...manifest.resources[1],
+          name: 'Partner',
+          path: '/evil.example/partners',
+          pluralLabel: 'Partners',
+        },
+        {
+          ...manifest.resources[1],
+          name: 'Account',
+          path: 'admin/accounts',
+          pluralLabel: 'Accounts',
+        },
+      ],
+    }
+    server.fetch = async (input, init) => {
+      const url = new URL(String(input), 'http://app.test')
+      if (url.pathname === '/.well-known/strutvane.json') {
+        server.calls.push(`GET ${url.pathname}`)
+        return json(nested)
+      }
+      if (
+        url.pathname === '/api/v1/admin/accounts' ||
+        url.pathname === '/api/v1/evil.example/partners'
+      )
+        return json({ data: customers, meta: { page: { size: 25, hasMore: false } } })
+      return base(input, init)
+    }
+    app(server)
+    const user = userEvent.setup()
+    const partners = await screen.findByRole('link', { name: 'Partners' })
+    expect(partners.getAttribute('href')).toBe('/evil.example/partners')
+    expect(partners.getAttribute('href')?.startsWith('//')).toBe(false)
+    await settled(server)
+    await user.click(await screen.findByRole('link', { name: 'Accounts' }))
+    expect(window.location.pathname).toBe('/admin/accounts')
+    expect(await screen.findByRole('table', { name: 'Accounts' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Open Acme GmbH' }))
+    expect(window.location.pathname).toBe('/admin/accounts/c1')
+  })
+})
+
 describe('router and session client helpers', () => {
   it('matchPath extracts params and refuses mismatches and broken encodings', () => {
     expect(matchPath('/reports/:year', '/reports/2026')).toEqual({ year: '2026' })
