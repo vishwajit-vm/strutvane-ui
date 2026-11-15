@@ -2,15 +2,20 @@
 // ResourceForm: widgets from field types, client validation, server issue routing (incl. array
 // paths), focus management, non-validation problems, idempotent retries, read-only rules,
 // capability gating, overrides and accessibility. Ported from spike 08 and extended.
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import { NETWORK_ERROR_CODE } from '../src/core/problems.ts'
 import { ResourceForm, type ResourceFormProps } from '../src/react/ResourceForm.tsx'
 import type { Widget } from '../src/react/types.ts'
 import { FakeApi, problem } from './fixtures/fake-api.ts'
-import { invoiceResource, manifest, withCapabilities } from './fixtures/manifest.ts'
-import { axeViolations, customers, makeInvoices, renderWithUI } from './helpers.tsx'
+import {
+  customerResource,
+  invoiceResource,
+  manifest,
+  withCapabilities,
+} from './fixtures/manifest.ts'
+import { axeViolations, customers, makeInvoices, renderWithUI, seededApi } from './helpers.tsx'
 
 const freshApi = () => new FakeApi(manifest, { invoices: makeInvoices(3), customers })
 
@@ -446,5 +451,47 @@ describe('accessibility', () => {
     await submit(user)
     await screen.findByText('Too small.')
     expect(await axeViolations(container)).toEqual([])
+  })
+})
+
+describe('double submit', () => {
+  // A double click, a double Enter or a slow network must never send the same form twice: the
+  // framework does not deduplicate Idempotency-Key, so a second POST is a second record.
+  test.each(['create', 'edit'] as const)(
+    '%s: a second submit while the first is in flight sends nothing',
+    async (mode) => {
+      const api = seededApi()
+      renderWithUI(
+        <ResourceForm
+          resource={customerResource}
+          {...(mode === 'edit' ? { recordId: 'c1' } : {})}
+        />,
+        { api },
+      )
+      const name = await screen.findByLabelText(/Name/)
+      await waitFor(() => expect(name).toHaveValue(mode === 'edit' ? 'Acme GmbH' : ''))
+      fireEvent.change(name, { target: { value: 'Umbrella' } })
+      const form = name.closest('form') as HTMLFormElement
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      await waitFor(() => expect(api.mutations).toHaveLength(1))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(api.mutations).toHaveLength(1)
+    },
+  )
+
+  test('after the first submit settles, the form can be submitted again (e.g. after an error)', async () => {
+    const api = seededApi()
+    api.failNext(problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'))
+    renderWithUI(<ResourceForm resource={customerResource} />, { api })
+    const name = await screen.findByLabelText(/Name/)
+    fireEvent.change(name, { target: { value: 'Umbrella' } })
+    const form = name.closest('form') as HTMLFormElement
+    fireEvent.submit(form)
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    fireEvent.submit(form)
+    await waitFor(() => expect(api.mutations).toHaveLength(2))
+    expect(api.rows('customers').filter((r) => r['name'] === 'Umbrella')).toHaveLength(1)
   })
 })

@@ -12,7 +12,8 @@
  *    banner (`role="alert"`, focused) built from the catalog, never raw internals, and every typed
  *    value is kept.
  * 4. **Editing** a field clears its server error immediately (the message is now stale).
- * 5. **Retries are idempotent**: one `Idempotency-Key` per user action, reused while the outcome is
+ * 5. **One submission at a time**: a submit while the previous one is in flight is ignored.
+ * 6. **Retries are idempotent**: one `Idempotency-Key` per user action, reused while the outcome is
  *    unknown (network error, 5xx, 429), replaced after success or a definitive 4xx answer.
  *
  * Read-only rules: `readOnly` fields are hidden on create and shown read-only on edit; `writeOnce`
@@ -217,6 +218,10 @@ function ResourceFormInner({
   const bannerRef = useRef<HTMLDivElement>(null)
   const idempotencyKey = useRef<string | undefined>(undefined)
   const serverErrorFields = useRef(new Set<string>())
+  // One submission at a time. The disabled button is not enough: Enter in a field, a double click
+  // before React re-renders, or a script can submit again while the first request is in flight,
+  // and the API does not deduplicate Idempotency-Key, so each extra submit would be another record.
+  const submitting = useRef(false)
 
   // Focus must move AFTER React rendered the error state (the banner may not exist yet, and screen
   // readers should hear the message), so it is requested through state and applied in an effect.
@@ -357,8 +362,12 @@ function ResourceFormInner({
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
+        if (submitting.current) return
+        submitting.current = true
         clearServerErrors()
-        void form.handleSubmit()
+        void form.handleSubmit().finally(() => {
+          submitting.current = false
+        })
       }}
     >
       <h2 id={`${ids}-title`}>
