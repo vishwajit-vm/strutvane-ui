@@ -55,6 +55,16 @@ describe('toListQuery', () => {
 describe('listReducer', () => {
   const start: ListPageState = { list: initialListState, previousCursors: [] }
 
+  test('previous from a page opened by link (cursor, no history) returns to page 1', () => {
+    const linked: ListPageState = {
+      list: { ...initialListState, cursor: 'c2' },
+      previousCursors: [],
+    }
+    const back = listReducer(linked, { type: 'previous' })
+    expect(back.list.cursor).toBeUndefined()
+    expect(back.previousCursors).toEqual([])
+  })
+
   test('next/previous walk the cursor stack; changing the query resets to page 1', () => {
     const p2 = listReducer(start, { type: 'next', cursor: 'c2' })
     const p3 = listReducer(p2, { type: 'next', cursor: 'c3' })

@@ -446,3 +446,27 @@ describe('the list follows URL changes made outside it (menu link, back/forward)
     expect(lastQuery(api)?.filter).toEqual({ op: 'eq', field: 'status', value: 'paid' })
   })
 })
+
+describe('hostile or stale list URLs', () => {
+  test('a page opened by link (a cursor in the URL) can go back to page 1', async () => {
+    const api = seededApi()
+    const cursor = btoa(JSON.stringify({ o: 25 }))
+    renderWithUI(
+      <ResourceList resource={invoiceResource} initialSearch={`page[cursor]=${cursor}`} />,
+      {
+        api,
+      },
+    )
+    await screen.findByText('Showing 5 invoices')
+    const previous = screen.getByRole('button', { name: 'Previous page' })
+    expect(previous).toBeEnabled()
+    await userEvent.setup().click(previous)
+    await screen.findByText('Showing 25 invoices')
+    expect(lastQuery(api)?.page).toEqual({ kind: 'cursor', size: 25 })
+  })
+
+  test('the search box cannot hold more than the server accepts', async () => {
+    await renderList()
+    expect(screen.getByRole('searchbox')).toHaveAttribute('maxLength', '200')
+  })
+})

@@ -89,7 +89,7 @@ export function useListQuery(
     searchString,
     rejected: initial.rejected,
     generation,
-    hasPrevious: state.previousCursors.length > 0,
+    hasPrevious: state.previousCursors.length > 0 || state.list.cursor !== undefined,
     setSort: useCallback((sort: readonly SortDirective[]) => dispatch({ type: 'sort', sort }), []),
     addFilter: useCallback((filter: SimpleFilter) => dispatch({ type: 'addFilter', filter }), []),
     removeFilter: useCallback((index: number) => dispatch({ type: 'removeFilter', index }), []),

@@ -38,6 +38,7 @@ import {
   useState,
 } from 'react'
 import { createIdempotencyKey } from '../core/ids.ts'
+import { MAX_SEARCH_LENGTH } from '../core/list-query-url.ts'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
@@ -292,6 +293,7 @@ export function ResourceList({
             <input
               id={`${ids}-search`}
               type="search"
+              maxLength={MAX_SEARCH_LENGTH}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />

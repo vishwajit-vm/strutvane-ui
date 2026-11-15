@@ -113,7 +113,11 @@ export function listReducer(state: ListPageState, action: ListAction): ListPageS
         previousCursors: [...state.previousCursors, state.list.cursor],
       }
     case 'previous': {
-      if (state.previousCursors.length === 0) return state
+      // A page opened by link has a cursor but no history: "Previous" goes back to page 1.
+      if (state.previousCursors.length === 0)
+        return state.list.cursor === undefined
+          ? state
+          : { list: firstPage(state.list), previousCursors: [] }
       const previous = state.previousCursors[state.previousCursors.length - 1]
       const base = firstPage(state.list)
       return {
