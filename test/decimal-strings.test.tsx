@@ -81,6 +81,29 @@ describe('decimal values as strings', () => {
     expect(screen.getByTestId('e')).toHaveTextContent('7.50')
   })
 
+  test('a decimal with more than two fraction digits shows every digit (never rounded away)', () => {
+    // decimal(12,4) exchange rates, quantities…: rounding to 2 digits on screen hides the real
+    // value, and two different stored values would look identical.
+    const field = decimalField({ type: 'string' })
+    const record = { id: 'r1' }
+    const cases: [unknown, string][] = [
+      ['1.2345', '1.2345'],
+      ['0.0001', '0.0001'],
+      ['1250.5', '1,250.50'],
+      ['12', '12.00'],
+      [0.125, '0.125'],
+    ]
+    for (const [value, text] of cases) {
+      const { unmount } = renderWithUI(
+        <span data-testid="v">
+          <DecimalCell field={field} value={value} record={record} resource={invoiceResource} />
+        </span>,
+      )
+      expect(screen.getByTestId('v')).toHaveTextContent(text)
+      unmount()
+    }
+  })
+
   test('the number widget sends exact text for string-typed fields and numbers otherwise', () => {
     const onChange = vi.fn()
     renderWithUI(<Harness onChange={onChange} />)

@@ -65,17 +65,24 @@ export const NumberCell: Cell = ({ value }) => {
   return <>{n !== undefined ? formatNumber(n, locale, {}) : t('ui.cell.empty')}</>
 }
 
-/** Decimals and money: always two fraction digits. */
+/** Fraction digits a numeric value carries (`"1.2345"` → 4, `0.125` → 3, `12` → 0). */
+function fractionDigits(n: number | string): number {
+  const text = typeof n === 'string' ? n : String(n)
+  if (/e/i.test(text)) return 20 // exponent form: let Intl show what it can
+  return text.split('.')[1]?.length ?? 0
+}
+
+/**
+ * Decimals and money: at least two fraction digits, and never FEWER than the value has. A
+ * `decimal(12,4)` value such as `"1.2345"` must not be shown as `1.23`: that hides the stored
+ * value and makes two different values look identical.
+ */
 export const DecimalCell: Cell = ({ value }) => {
   const { t, locale } = useStrutvane()
   const n = numericValue(value)
-  return (
-    <>
-      {n !== undefined
-        ? formatNumber(n, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : t('ui.cell.empty')}
-    </>
-  )
+  if (n === undefined) return <>{t('ui.cell.empty')}</>
+  const digits = Math.min(20, Math.max(2, fractionDigits(n)))
+  return <>{formatNumber(n, locale, { minimumFractionDigits: 2, maximumFractionDigits: digits })}</>
 }
 
 /** Dates (`YYYY-MM-DD`), shown in the locale's short format. Unparseable values are shown as-is. */
