@@ -97,7 +97,10 @@ describe(`render ${ROWS} rows`, () => {
     expect(virtualRows).toBeLessThan(60) // viewport (600px / 40px) + overscan
     expect(rowCount).toBe(String(ROWS + 1)) // semantics keep the full row count
     expect(median(virtual)).toBeLessThan(median(full))
-  })
+    // Four full 500-row renders take ~17 s on an idle machine, right at the 20 s default: a busy CI
+    // runner timed out. The assertions are relative (window vs full), so more time cannot hide a
+    // regression; it only removes the flake.
+  }, 90_000)
 
   test('regression: an unmeasurable (0px) container still shows the first rows, never an empty table', async () => {
     const { bodyRows } = await measure(100) // no layout mock: container measures 0x0
