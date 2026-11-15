@@ -116,6 +116,7 @@ export function App() {
   - textarea
   - number and decimal: what you typed is kept, so `1250.` is not swallowed, and the locale's decimal comma is accepted
   - enum select, checkbox and date
+  - JSON (`type: "json"`): a textarea whose text is parsed, so the API receives the JSON value itself, never the text as a string; text that does not parse is refused before sending
   - a read-only display
   - a **belongsTo picker** that searches on the server and pages 100 records at a time with "Load more", so every record is reachable
   - repeatable groups for `array` fields

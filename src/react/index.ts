@@ -17,6 +17,7 @@ export {
   DecimalCell,
   DefaultCell,
   defaultCells,
+  JsonCell,
   NumberCell,
   RelationCell,
 } from './cells.tsx'
@@ -75,6 +76,7 @@ export {
   CheckboxWidget,
   DateWidget,
   defaultWidgets,
+  JsonWidget,
   NumberWidget,
   numericText,
   parseTypedNumber,

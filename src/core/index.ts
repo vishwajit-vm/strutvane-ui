@@ -97,6 +97,7 @@ export {
 export type { ApiRecord, MutationOptions, ResourceApi } from './types.ts'
 export {
   INTEGER_TYPES,
+  InvalidJsonText,
   isEmptyValue,
   isIsoDate,
   itemFieldDescriptor,

@@ -46,6 +46,18 @@ export const TEMPORAL_TYPES: ReadonlySet<string> = new Set([
   'time',
 ])
 
+/**
+ * What a JSON field holds while its text does not parse (`{max: 5`). It is a distinct value, not
+ * the raw string, because a string IS valid JSON: sending the text would silently store a string
+ * where an object was meant. Validation refuses it (`invalid_json`), so it is never sent.
+ */
+export class InvalidJsonText {
+  readonly text: string
+  constructor(text: string) {
+    this.text = text
+  }
+}
+
 /** Is this value "empty" for the purpose of `required`? */
 export function isEmptyValue(value: unknown): boolean {
   return (
@@ -96,6 +108,7 @@ export function validateField(
   })
 
   if (isEmptyValue(value)) return field.required ? [issue('required')] : []
+  if (value instanceof InvalidJsonText) return [issue('invalid_json')]
 
   const issues: ValidationIssue[] = []
   const schema = field.schema

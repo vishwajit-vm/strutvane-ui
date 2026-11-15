@@ -38,6 +38,7 @@ export const defaultMessages: MessageCatalog = Object.freeze({
   invalid_number: '{attribute} must be a number.',
   invalid_integer: '{attribute} must be a whole number.',
   invalid_format: '{attribute} has an invalid format.',
+  invalid_json: '{attribute} must be valid JSON.',
   unique: 'This {attribute} is already taken.',
   date_before_field: '{attribute} must be on or after {other}.',
   unknown: '{attribute} is invalid.',

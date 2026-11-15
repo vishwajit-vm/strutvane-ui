@@ -104,6 +104,13 @@ export const RelationCell: Cell = ({ field, value }) => {
   return <>{label ?? id}</>
 }
 
+/** JSON values (`type: "json"`): compact JSON text, never hidden behind the empty marker. */
+export const JsonCell: Cell = ({ value }) => {
+  const { t } = useStrutvane()
+  if (value === null || value === undefined) return <>{t('ui.cell.empty')}</>
+  return <code>{JSON.stringify(value)}</code>
+}
+
 /** Arrays: the number of items. */
 export const ArrayCell: Cell = ({ value }) => {
   const { t, locale } = useStrutvane()
@@ -128,4 +135,5 @@ export const defaultCells: Readonly<Record<string, Cell>> = Object.freeze({
   date: DateCell,
   belongsTo: RelationCell,
   array: ArrayCell,
+  json: JsonCell,
 })

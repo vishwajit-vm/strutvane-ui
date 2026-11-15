@@ -9,7 +9,7 @@
  * @module
  */
 import { type ChangeEvent, useId, useState } from 'react'
-import { INTEGER_TYPES } from '../core/validation.ts'
+import { INTEGER_TYPES, InvalidJsonText } from '../core/validation.ts'
 import { useStrutvane } from './context.ts'
 import { relationId, useDebouncedValue, useRelationLabel, useRelationOptions } from './relations.ts'
 import type { Widget, WidgetProps } from './types.ts'
@@ -147,6 +147,57 @@ export const NumberWidget: Widget = (p) => {
   )
 }
 
+/** The JSON text a value is edited as (`null` and `undefined` are an empty box). */
+const jsonText = (v: unknown): string =>
+  v === null || v === undefined || v instanceof InvalidJsonText ? '' : JSON.stringify(v, null, 2)
+
+/**
+ * JSON fields (`type: "json"`): a textarea holding JSON text, parsed into the form value. The value
+ * sent is the parsed JSON (an object, array, number…), never the text itself: sending the text
+ * would silently store a JSON *string* in place of the object, which the server accepts. Text that
+ * does not parse becomes an {@link InvalidJsonText}, which validation refuses ("must be valid
+ * JSON"), so nothing is sent until it is fixed. Like the number widget, the draft text is kept
+ * while typing and only resyncs when the value changes from outside.
+ */
+export const JsonWidget: Widget = (p) => {
+  const [draft, setDraft] = useState(() =>
+    p.value instanceof InvalidJsonText ? p.value.text : jsonText(p.value),
+  )
+  const [seen, setSeen] = useState<unknown>(p.value)
+  const toValue = (raw: string): unknown => {
+    if (raw.trim() === '') return null
+    try {
+      return JSON.parse(raw) as unknown
+    } catch {
+      return new InvalidJsonText(raw)
+    }
+  }
+  if (!Object.is(seen, p.value)) {
+    setSeen(p.value)
+    if (!(p.value instanceof InvalidJsonText) && !sameJson(toValue(draft), p.value))
+      setDraft(jsonText(p.value))
+  }
+  return (
+    <textarea
+      {...common(p)}
+      value={draft}
+      readOnly={p.readOnly}
+      rows={6}
+      spellCheck={false}
+      onChange={(e: ChangeEvent<HTMLTextAreaElement>) => {
+        const raw = e.target.value
+        const value = toValue(raw)
+        setDraft(raw)
+        setSeen(value)
+        p.onChange(value)
+      }}
+    />
+  )
+}
+
+const sameJson = (a: unknown, b: unknown): boolean =>
+  !(a instanceof InvalidJsonText) && JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
 /** Enum: a native select with an empty choice. */
 export const SelectWidget: Widget = (p) => {
   const { t } = useStrutvane()
@@ -281,6 +332,7 @@ export const defaultWidgets: Readonly<Record<string, Widget>> = Object.freeze({
   enum: SelectWidget,
   boolean: CheckboxWidget,
   date: DateWidget,
+  json: JsonWidget,
   computed: ReadOnlyWidget,
   readonly: ReadOnlyWidget,
   belongsTo: RelationPickerWidget,
