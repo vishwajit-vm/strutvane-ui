@@ -14,7 +14,8 @@
  */
 import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/contracts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactElement, useId, useState } from 'react'
+import { type ReactElement, useId, useRef, useState } from 'react'
+import { createIdempotencyKey } from '../core/ids.ts'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
@@ -52,6 +53,12 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
   const queryClient = useQueryClient()
   const headingId = useId()
   const [deleteError, setDeleteError] = useState<string | undefined>()
+  // One delete per user action: a second click while the confirmation or the request is pending is
+  // ignored (a ref, so it holds before React re-renders). The idempotency key is kept until the
+  // delete succeeds, so a retry after an unknown outcome (offline, 5xx) is the SAME request.
+  const deleting = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const deleteKey = useRef<string | undefined>(undefined)
   const record = useQuery({
     queryKey: ['strutvane', 'record', resource.path, recordId],
     enabled: resource.capabilities.view,
@@ -77,10 +84,15 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
   const data = record.data
   const title = recordTitle(resource, data)
   const remove = async () => {
-    if (!props.confirmDelete || !(await props.confirmDelete(data))) return
-    setDeleteError(undefined)
+    if (!props.confirmDelete || deleting.current) return
+    deleting.current = true
+    setBusy(true)
     try {
-      await api.delete(resource.path, data.id)
+      if (!(await props.confirmDelete(data))) return
+      setDeleteError(undefined)
+      deleteKey.current ??= createIdempotencyKey()
+      await api.delete(resource.path, data.id, { idempotencyKey: deleteKey.current })
+      deleteKey.current = undefined
       await queryClient.invalidateQueries({ queryKey: ['strutvane', 'list', resource.path] })
       props.onDeleted?.(data)
     } catch (error) {
@@ -89,6 +101,9 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
           ? problemBannerText(error.problem, registry.messages, locale)
           : t('ui.list.deleteFailed', { title }),
       )
+    } finally {
+      deleting.current = false
+      setBusy(false)
     }
   }
   const related = resource.fields.filter((f) => {
@@ -111,7 +126,12 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
             </button>
           ) : null}
           {props.confirmDelete && resource.capabilities.delete ? (
-            <button type="button" className="sv-danger" onClick={() => void remove()}>
+            <button
+              type="button"
+              className="sv-danger"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
               {t('ui.list.deleteShort')}
             </button>
           ) : null}
