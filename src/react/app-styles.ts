@@ -14,6 +14,7 @@ export const APP_STYLES: string = `
   --sv-bg: #f7f8fa; --sv-surface: #ffffff; --sv-text: #1d2433; --sv-muted: #5b6475;
   --sv-border: #d9dde5; --sv-accent: #1f5fbf; --sv-accent-text: #ffffff; --sv-danger: #b42318;
   --sv-radius: 6px; --sv-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
 :where(:root) { --sv-bg: #12151b; --sv-surface: #1b2029; --sv-text: #e6e9ef; --sv-muted: #a3acbd;

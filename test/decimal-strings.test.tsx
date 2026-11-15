@@ -150,4 +150,12 @@ describe('default app styles', () => {
     expect(main).toMatch(/min-width:\s*0/)
     expect(main).toMatch(/overflow-x:\s*auto/)
   })
+
+  test('dark mode tells the browser, so native controls (selects, date pickers) match', async () => {
+    const { APP_STYLES } = await import('../src/react/app-styles.ts')
+    // Without `color-scheme`, the browser draws native popups, scrollbars and the date-picker icon
+    // for a light page: dark-on-dark icons and light option lists inside the dark theme.
+    const root = /:where\(:root\)\s*\{([^}]*)\}/.exec(APP_STYLES)?.[1] ?? ''
+    expect(root).toMatch(/color-scheme:\s*light dark/)
+  })
 })
