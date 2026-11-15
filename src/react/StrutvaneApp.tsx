@@ -219,6 +219,16 @@ interface SignedInProps extends StrutvaneAppProps {
 function SignedIn(props: SignedInProps): ReactElement {
   const { t, session, actor } = props
   const auth = props.auth !== false
+  // A client-side page change moves focus to the new content (WCAG 2.4.3): otherwise keyboard and
+  // screen-reader users stay on the link or button they used, which may be gone (focus on <body>).
+  // Not on the first render (nothing changed yet) and not for query-only changes (list state).
+  const { pathname } = useRouter()
+  const shownPath = useRef(pathname)
+  useEffect(() => {
+    if (shownPath.current === pathname) return
+    shownPath.current = pathname
+    document.getElementById('sv-main')?.focus()
+  }, [pathname])
   const tenants = useQuery({
     queryKey: ['strutvane', 'session', 'tenants', actor.id],
     enabled: auth,

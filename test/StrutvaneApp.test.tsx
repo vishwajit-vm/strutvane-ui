@@ -381,6 +381,25 @@ describe('URLs built from record ids and manifest paths', () => {
   })
 })
 
+describe('focus on navigation', () => {
+  // A client-side page change must move focus to the new content (WCAG 2.4.3), or keyboard and
+  // screen-reader users stay on a link or button that may no longer exist (focus falls to <body>).
+  it('moves focus to the main area when the page changes, not when only the query changes', async () => {
+    const server = fakeServer({ signedIn: true })
+    app(server)
+    const user = userEvent.setup()
+    await settled(server)
+    const first = await screen.findByRole('link', { name: 'Customers' })
+    expect(document.activeElement).toBe(document.body) // the first load does not steal focus
+    await user.click(first)
+    await screen.findByRole('table', { name: 'Customers' })
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('main')))
+    await user.click(screen.getByRole('button', { name: 'Open Acme GmbH' }))
+    await screen.findByRole('heading', { name: 'Acme GmbH' })
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('main')))
+  })
+})
+
 describe('router and session client helpers', () => {
   it('matchPath extracts params and refuses mismatches and broken encodings', () => {
     expect(matchPath('/reports/:year', '/reports/2026')).toEqual({ year: '2026' })
