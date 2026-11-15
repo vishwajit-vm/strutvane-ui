@@ -18,7 +18,9 @@ import { type ReactElement, useId, useState } from 'react'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
+import { CellFallback } from './cells.tsx'
 import { useStrutvane } from './context.ts'
+import { RenderBoundary } from './RenderBoundary.tsx'
 import { ResourceList } from './ResourceList.tsx'
 import { recordTitle } from './relations.ts'
 
@@ -120,7 +122,9 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
             <div key={field.name} className="sv-detail-field">
               <dt>{field.label}</dt>
               <dd>
-                <Cell field={field} value={data[field.name]} record={data} resource={resource} />
+                <RenderBoundary fallback={<CellFallback />} resetKey={data[field.name]}>
+                  <Cell field={field} value={data[field.name]} record={data} resource={resource} />
+                </RenderBoundary>
               </dd>
             </div>
           )

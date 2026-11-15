@@ -30,6 +30,7 @@ export {
 export { defaultRegistry } from './defaults.ts'
 export { errorMessages, FieldShell, type FieldShellProps } from './FieldShell.tsx'
 export { describeFilter, FilterBar, type FilterBarProps, rawFilterValues } from './FilterBar.tsx'
+export { RenderBoundary, type RenderBoundaryProps } from './RenderBoundary.tsx'
 export { detailFields, ResourceDetail, type ResourceDetailProps } from './ResourceDetail.tsx'
 export {
   emptyValue,

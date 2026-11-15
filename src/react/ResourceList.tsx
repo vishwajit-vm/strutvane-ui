@@ -41,8 +41,10 @@ import { createIdempotencyKey } from '../core/ids.ts'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'
+import { CellFallback } from './cells.tsx'
 import { useStrutvane } from './context.ts'
 import { FilterBar } from './FilterBar.tsx'
+import { RenderBoundary } from './RenderBoundary.tsx'
 import { recordTitle, useDebouncedValue } from './relations.ts'
 import { useListQuery } from './useListQuery.ts'
 
@@ -173,13 +175,16 @@ export function ResourceList({
           accessorFn: (row: ApiRecord) => row[field.name],
           header: field.label,
           enableSorting: field.sortable,
+          // One crashing cell (an override, an unexpected value) must not blank the whole list.
           cell: (ctx) => (
-            <CellComponent
-              field={field}
-              value={ctx.row.original[field.name]}
-              record={ctx.row.original}
-              resource={resource}
-            />
+            <RenderBoundary fallback={<CellFallback />} resetKey={ctx.row.original[field.name]}>
+              <CellComponent
+                field={field}
+                value={ctx.row.original[field.name]}
+                record={ctx.row.original}
+                resource={resource}
+              />
+            </RenderBoundary>
           ),
         }
       }),

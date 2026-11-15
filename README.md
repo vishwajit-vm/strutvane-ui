@@ -157,7 +157,7 @@ const MoneyInput: Widget = ({ id, value, onChange, onBlur, describedBy, invalid 
 />
 ```
 
-Widgets resolve `Resource.field` → named widget (`field.widget`) → field type → `default`. Cells resolve `Resource.field` → field type → `default`. A widget renders only its control: put `id` on it and pass `describedBy` to `aria-describedby`, and it is fully accessible.
+Every cell and every widget renders inside its own `RenderBoundary`: an override (or a value of an unexpected shape) that throws shows "Cannot display this value" in that one cell, or a notice in that one field, instead of blanking the screen. Widgets resolve `Resource.field` → named widget (`field.widget`) → field type → `default`. Cells resolve `Resource.field` → field type → `default`. A widget renders only its control: put `id` on it and pass `describedBy` to `aria-describedby`, and it is fully accessible.
 
 ## Using the core without React
 

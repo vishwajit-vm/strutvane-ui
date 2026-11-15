@@ -9,8 +9,11 @@
  * @module
  */
 import type { FieldDescriptor } from '@strutvane/contracts'
-import type { ReactElement } from 'react'
+import { type ReactElement, useContext } from 'react'
 import { fieldDomId, uniqueMessages } from '../core/issues.ts'
+import { defaultMessages, formatMessage } from '../core/messages.ts'
+import { StrutvaneContext } from './context.ts'
+import { RenderBoundary } from './RenderBoundary.tsx'
 import type { Widget } from './types.ts'
 
 /** Props of {@link FieldShell}. */
@@ -47,6 +50,11 @@ export function FieldShell({
   idScope = '',
 }: FieldShellProps): ReactElement {
   const id = fieldDomId(name, idScope)
+  // Works inside or outside a provider: custom forms may render FieldShell on their own.
+  const ctx = useContext(StrutvaneContext)
+  const widgetError = ctx
+    ? ctx.t('ui.form.widgetError')
+    : formatMessage(defaultMessages, 'ui.form.widgetError')
   const messages = errorMessages(errors)
   const helpId = field.help ? `${id}-help` : undefined
   const errorId = messages.length > 0 ? `${id}-error` : undefined
@@ -57,17 +65,21 @@ export function FieldShell({
         {field.label}
         {field.required && !readOnly && <span aria-hidden="true"> *</span>}
       </label>
-      <WidgetComponent
-        field={field}
-        id={id}
-        name={name}
-        value={value}
-        onChange={onChange}
-        onBlur={onBlur}
-        readOnly={readOnly}
-        invalid={messages.length > 0}
-        describedBy={describedBy}
-      />
+      {/* A crashing widget (an override, an unknown field type) must not take the form down: the
+          field shows a notice and every other field can still be edited and saved. */}
+      <RenderBoundary fallback={<p id={id}>{widgetError}</p>}>
+        <WidgetComponent
+          field={field}
+          id={id}
+          name={name}
+          value={value}
+          onChange={onChange}
+          onBlur={onBlur}
+          readOnly={readOnly}
+          invalid={messages.length > 0}
+          describedBy={describedBy}
+        />
+      </RenderBoundary>
       {field.help && <p id={helpId}>{field.help}</p>}
       {errorId && <p id={errorId}>{messages.join(' ')}</p>}
     </div>

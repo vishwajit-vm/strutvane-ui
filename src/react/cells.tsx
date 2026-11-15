@@ -5,6 +5,7 @@
  *
  * @module
  */
+import type { ReactElement } from 'react'
 import { isIsoDate } from '../core/validation.ts'
 import { useStrutvane } from './context.ts'
 import { relationId, useRelationLabel } from './relations.ts'
@@ -107,6 +108,12 @@ export const RelationCell: Cell = ({ field, value }) => {
 export const ArrayCell: Cell = ({ value }) => {
   const { t, locale } = useStrutvane()
   return <>{Array.isArray(value) ? formatNumber(value.length, locale, {}) : t('ui.cell.empty')}</>
+}
+
+/** Shown in place of a cell that crashed while rendering (see `RenderBoundary`). */
+export const CellFallback = (): ReactElement => {
+  const { t } = useStrutvane()
+  return <>{t('ui.cell.error')}</>
 }
 
 /** Default cell map. */

@@ -105,6 +105,7 @@ export const defaultMessages: MessageCatalog = Object.freeze({
   'ui.form.searchRelation': 'Search {resource}',
   'ui.form.loadMore': 'Load more',
   'ui.form.relationLoading': 'Loading…',
+  'ui.form.widgetError': 'This field cannot be displayed. The other fields can still be saved.',
   // UI: app shell (StrutvaneApp)
   'ui.app.skip': 'Skip to content',
   'ui.app.nav': 'Main navigation',
@@ -150,6 +151,7 @@ export const defaultMessages: MessageCatalog = Object.freeze({
   'ui.problem.code.PAYLOAD_TOO_LARGE': 'This request is too large to send.',
   // UI: cells
   'ui.cell.empty': '—',
+  'ui.cell.error': 'Cannot display this value',
   'ui.cell.yes': 'Yes',
   'ui.cell.no': 'No',
 })
