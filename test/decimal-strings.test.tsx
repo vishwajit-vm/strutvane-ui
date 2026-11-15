@@ -139,4 +139,15 @@ describe('default app styles', () => {
       for (const part of sel.split(',')) expect(part.trim(), sel).toMatch(/^:where\(.+\)$/)
     }
   })
+
+  // Layout cannot be measured in jsdom, so these pin the rules that prevent the known defects.
+  test('wide tables scroll inside the main area at every width, not the whole page', async () => {
+    const { APP_STYLES } = await import('../src/react/app-styles.ts')
+    // The rule must sit OUTSIDE any @media block: it used to exist only under max-width: 720px, so
+    // on desktop a wide table pushed the whole page (header and menu included) sideways.
+    const outsideMedia = APP_STYLES.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '')
+    const main = /:where\(\.sv-app-main\)\s*\{([^}]*)\}/.exec(outsideMedia)?.[1] ?? ''
+    expect(main).toMatch(/min-width:\s*0/)
+    expect(main).toMatch(/overflow-x:\s*auto/)
+  })
 })

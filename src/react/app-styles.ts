@@ -3,7 +3,8 @@
  * generated `web/theme/tokens.css`) can restyle everything by setting `--sv-*` variables. Injected
  * by `<StrutvaneApp>` unless `styles={false}`. Every selector is wrapped in `:where()`, so it has
  * zero specificity: any app rule (`button { … }`, `.page h1 { … }`) wins without `!important`.
- * Layout only uses flexbox and grid; colours meet
+ * Layout only uses flexbox and grid; the main area scrolls a wide table sideways itself (at every
+ * width), so it never pushes the whole page, header and menu included, off screen; colours meet
  * WCAG AA contrast on the defaults, and focus is always visible.
  *
  * @module
@@ -42,7 +43,7 @@ export const APP_STYLES: string = `
 :where(.sv-app-nav a) { display: block; padding: 5px 8px; border-radius: var(--sv-radius); text-decoration: none; color: var(--sv-text); }
 :where(.sv-app-nav a[aria-current="page"]) { background: var(--sv-bg); font-weight: 600; }
 :where(.sv-nav-group) { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--sv-muted); margin: 8px 8px 4px; }
-:where(.sv-app-main) { padding: 20px 28px; min-width: 0; }
+:where(.sv-app-main) { padding: 20px 28px; min-width: 0; overflow-x: auto; }
 :where(.sv-app-main table) { width: 100%; border-collapse: collapse; background: var(--sv-surface);
   border: 1px solid var(--sv-border); border-radius: var(--sv-radius); }
 :where(.sv-app-main th), :where(.sv-app-main td) { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--sv-border); }
@@ -61,6 +62,6 @@ export const APP_STYLES: string = `
 @media (max-width: 720px) {
 :where(.sv-app-body) { grid-template-columns: 1fr; }
 :where(.sv-app-nav) { border-right: 0; border-bottom: 1px solid var(--sv-border); }
-:where(.sv-app-main) { padding: 16px; overflow-x: auto; }
+:where(.sv-app-main) { padding: 16px; }
 }
 `
