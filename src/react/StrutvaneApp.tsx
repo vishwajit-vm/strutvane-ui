@@ -749,27 +749,17 @@ function Pages(
   )
 }
 
-/** The default home page: a welcome and the sidebar's sections as links. */
+/** The default home page: a welcome that points at the sidebar (the sections live there). */
 function Welcome(props: {
   readonly appName: string
   readonly t: SignedInProps['t']
-  readonly entries: readonly SidebarEntry[]
 }): ReactElement {
   const { Card } = useSkins()
   return (
     <section aria-labelledby="sv-welcome" data-sv-part="home">
       <h1 id="sv-welcome">{props.t('ui.app.welcome', { app: props.appName })}</h1>
-      <p>{props.t('ui.app.chooseSection')}</p>
       <Card>
-        <ul>
-          {props.entries
-            .filter((e) => e.path !== '/')
-            .map((e) => (
-              <li key={e.path}>
-                <Link to={e.path}>{e.label}</Link>
-              </li>
-            ))}
-        </ul>
+        <p>{props.t('ui.app.chooseSection')}</p>
       </Card>
     </section>
   )

@@ -16,7 +16,13 @@ import {
   resolveDesignTokens,
   type ThemeName,
 } from '../design/stylesheet.ts'
-import { CONTRAST_PAIRS, chartVar, cssVar, type PublicOverrides } from '../design/tokens.ts'
+import {
+  CONTRAST_PAIRS,
+  type CssLength,
+  chartVar,
+  cssVar,
+  type PublicOverrides,
+} from '../design/tokens.ts'
 import { findHardCodedColours } from './colours.ts'
 
 const THEMES: readonly ThemeName[] = ['light', 'dark']
@@ -137,11 +143,15 @@ export function checkSourceColours(design: Design, options: SourceOptions = {}):
 }
 
 /** Distinct sample values for each public override token (far from any sensible default). */
-export const OVERRIDE_SAMPLES = {
+export const OVERRIDE_SAMPLES: {
+  readonly fontSans: string
+  readonly radius: CssLength
+  readonly density: number
+} = {
   fontSans: '"Conformance Sans", serif',
   radius: '17px',
   density: 1.37,
-} as const satisfies PublicOverrides
+}
 
 /** Which custom properties must change for each public token, and which the stylesheet must use. */
 const OVERRIDE_RULES = [

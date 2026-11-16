@@ -10,7 +10,10 @@ import axe from 'axe-core'
 import type { ReactElement } from 'react'
 import { afterEach } from 'vitest'
 import type { ResourceApi } from '../src/core/types.ts'
+import { DesignProvider } from '../src/design/DesignProvider.tsx'
+import { plain } from '../src/design/plain/index.ts'
 import { StrutvaneProvider } from '../src/react/StrutvaneProvider.tsx'
+import { ToastProvider } from '../src/react/toasts.tsx'
 import type { UiOverrides } from '../src/react/types.ts'
 import { FakeApi, type Row } from './fixtures/fake-api.ts'
 import { manifest } from './fixtures/manifest.ts'
@@ -66,17 +69,31 @@ export function renderWithUI(ui: ReactElement, opts: RenderOptions = {}): Render
   const api = opts.api ?? seededApi()
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
-    <StrutvaneProvider
-      api={api}
-      manifest={opts.manifest ?? manifest}
-      queryClient={queryClient}
-      {...(opts.overrides ? { overrides: opts.overrides } : {})}
-      {...(opts.locale ? { locale: opts.locale } : {})}
-    >
-      {ui}
-    </StrutvaneProvider>,
+    <DesignProvider design={plain} theme="light" injectStyles={false}>
+      <ToastProvider dismissLabel="Dismiss">
+        <StrutvaneProvider
+          api={api}
+          manifest={opts.manifest ?? manifest}
+          queryClient={queryClient}
+          {...(opts.overrides ? { overrides: opts.overrides } : {})}
+          {...(opts.locale ? { locale: opts.locale } : {})}
+        >
+          {ui}
+        </StrutvaneProvider>
+      </ToastProvider>
+    </DesignProvider>,
   )
   return { ...result, api, queryClient }
+}
+
+/**
+ * The list's status line for `count` rows starting at `from`, with or without a total:
+ * "Showing 1–25 of 30 invoices" (and "Showing 0 invoices" for none).
+ */
+export function showing(count: number, resource = 'invoices', from = 1): RegExp {
+  if (count === 0) return new RegExp(`^Showing 0 ${resource}$`)
+  const range = `${from}–${from + count - 1}`
+  return new RegExp(`^Showing ${range}( of (more than )?[\\d,]+)? ${resource}$`)
 }
 
 /** One axe violation, summarised. */

@@ -27,7 +27,7 @@ describe('URL round-trip', () => {
     ],
     search: 'Acme & Co, Ltd',
     pageSize: 50,
-    cursor: 'eyJvIjo1MH0=',
+    page: 7,
   }
 
   test('state → URL → state is lossless, including commas, &, =, %, +, brackets and Unicode', () => {
@@ -84,14 +84,14 @@ describe('URL round-trip', () => {
     maxLength: 30,
   })
 
-  test('property: any text filter, search and cursor survive the round trip exactly', () => {
+  test('property: any text filter, search and page survive the round trip exactly', () => {
     fc.assert(
       fc.property(
         nasty,
         nasty,
-        nasty,
+        fc.integer({ min: 1, max: 10_000 }),
         fc.integer({ min: 1, max: 100 }),
-        (text, search, cursor, size) => {
+        (text, search, page, size) => {
           const state: ListState = {
             filters: [
               { field: 'number', op: 'contains', value: text.trim() === '' ? 'x' : text.trim() },
@@ -100,7 +100,7 @@ describe('URL round-trip', () => {
             sort: [{ field: 'amount', direction: 'desc' }],
             search: search.trim(),
             pageSize: size,
-            cursor,
+            page,
           }
           const parsed = parseSearchString(toSearchString(state), invoiceResource)
           expect(parsed.rejected).toEqual([])
@@ -143,7 +143,10 @@ describe('parseSearchString fails closed', () => {
     ['sort=-notes', 'not_sortable'],
     ['sort=-secret', 'not_sortable'],
     ['page%5Bsize%5D=10&debug=1', 'unknown_parameter'],
-    ['page[number]=2', 'unsupported_parameter'],
+    ['page[cursor]=abc', 'unsupported_parameter'],
+    ['page[number]=0', 'invalid_value'],
+    ['page[number]=x', 'invalid_value'],
+    ['page[number]=99999', 'invalid_value'],
     ['search=a&search=b', 'duplicate_parameter'],
     ['page[size]=abc', 'invalid_value'],
     ['page[size]=1000', 'invalid_value'],
@@ -186,8 +189,11 @@ describe('parseSearchString fails closed', () => {
     ).toHaveLength(200)
   })
 
-  test('an empty cursor means the first page', () => {
-    expect(parseSearchString('page[cursor]=', invoiceResource).state.cursor).toBeUndefined()
+  test('no page number means the first page, and page 1 is not written to the URL', () => {
+    expect(parseSearchString('', invoiceResource).state.page).toBe(1)
+    expect(parseSearchString('page[number]=4', invoiceResource).state.page).toBe(4)
+    const parsed = parseSearchString('page[number]=1', invoiceResource)
+    expect(toSearchString(parsed.state)).toBe('')
   })
 })
 

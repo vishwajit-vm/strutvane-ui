@@ -45,7 +45,7 @@ describe('createRecordBatcher', () => {
     expect(a.list).toHaveBeenCalledTimes(1)
     expect(vi.mocked(a.list).mock.calls[0]?.[1]).toEqual({
       filter: { op: 'in', field: 'id', values: ['1', '2', 'missing'] },
-      page: { kind: 'cursor', size: 3 },
+      page: { kind: 'offset', size: 3, number: 1 },
     })
   })
 

@@ -11,7 +11,7 @@ import { ResourceForm } from '../src/react/ResourceForm.tsx'
 import { ResourceList } from '../src/react/ResourceList.tsx'
 import type { Cell, Widget } from '../src/react/types.ts'
 import { customerResource, invoiceResource } from './fixtures/manifest.ts'
-import { axeViolations, renderWithUI, seededApi } from './helpers.tsx'
+import { axeViolations, renderWithUI, seededApi, showing } from './helpers.tsx'
 
 const Broken: Widget = () => {
   throw new Error('widget crashed')
@@ -36,7 +36,7 @@ describe('render errors are contained per cell and per field', () => {
     const { container } = renderWithUI(<ResourceList resource={invoiceResource} />, {
       overrides: { fieldCells: { 'Invoice.number': CrashOn('INV-1000') } },
     })
-    expect(await screen.findByText('Showing 25 invoices')).toBeInTheDocument()
+    expect(await screen.findByText(showing(25))).toBeInTheDocument()
     const table = screen.getByRole('table', { name: 'Invoices' })
     expect(within(table).getByText('INV-1001')).toBeInTheDocument()
     expect(within(table).getAllByText('Cannot display this value')).toHaveLength(1)
@@ -48,7 +48,7 @@ describe('render errors are contained per cell and per field', () => {
     renderWithUI(<ResourceList resource={customerResource} />, {
       overrides: { cells: { default: CrashOn('Acme GmbH') } },
     })
-    expect(await screen.findByText('Showing 3 customers')).toBeInTheDocument()
+    expect(await screen.findByText(showing(3, 'customers'))).toBeInTheDocument()
     expect(screen.getByText('Globex Inc')).toBeInTheDocument()
   })
 

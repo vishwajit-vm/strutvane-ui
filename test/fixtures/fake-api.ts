@@ -1,10 +1,11 @@
 /**
  * In-memory ResourceApi that behaves like a Strutvane server for UI tests:
  * - list: filter (two-valued null-safe semantics, ADR-0008), search, sort (stable, id tiebreak),
- *   cursor pagination (page size capped at LIST_QUERY_LIMITS.maxPageSize);
+ *   numbered pages with a total (cursor pages still work; page size capped at
+ *   LIST_QUERY_LIMITS.maxPageSize);
  * - create/update: server-side validation with the SAME catalog as the client, plus server-only
  *   rules (unique fields, a cross-field date rule), returning problems with `issues`;
- * - delete; `failNext()` simulates non-validation failures (409, 500, …);
+ * - delete and restore (deleted rows are kept for `restore`); `failNext()` simulates non-validation failures (409, 500, …);
  * - `requests` / `mutations` record what the UI asked for, so tests can assert it.
  */
 import {
@@ -25,7 +26,7 @@ import { validateArrayItems, validateField } from '../../src/core/validation.ts'
 export type Row = Record<string, unknown> & { id: string }
 
 export interface MutationLog {
-  readonly method: 'create' | 'update' | 'delete'
+  readonly method: 'create' | 'update' | 'delete' | 'restore'
   readonly path: string
   readonly id?: string
   readonly idempotencyKey: string | undefined
@@ -38,6 +39,7 @@ export class FakeApi implements ResourceApi {
   private readonly tables = new Map<string, Row[]>()
   private readonly resources: Map<string, ResourceDescriptor>
   private readonly failures: (Problem | Error)[] = []
+  private readonly trash = new Map<string, Row>()
   private seq = 0
 
   constructor(manifest: ResourceManifest, seed: Record<string, Row[]> = {}) {
@@ -75,6 +77,21 @@ export class FakeApi implements ResourceApi {
       query.page?.size ?? LIST_QUERY_LIMITS.defaultPageSize,
       LIST_QUERY_LIMITS.maxPageSize,
     )
+    if (query.page?.kind === 'offset') {
+      const offset = (query.page.number - 1) * size
+      const data = rows.slice(offset, offset + size)
+      return {
+        data,
+        meta: {
+          page: {
+            size,
+            number: query.page.number,
+            hasMore: offset + size < rows.length,
+            total: rows.length,
+          },
+        },
+      }
+    }
     const offset =
       query.page?.kind === 'cursor' && query.page.cursor ? decodeCursor(query.page.cursor) : 0
     const data = rows.slice(offset, offset + size)
@@ -150,7 +167,22 @@ export class FakeApi implements ResourceApi {
         problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
       )
     }
-    table.splice(index, 1)
+    const [removed] = table.splice(index, 1)
+    if (removed) this.trash.set(`${path}/${id}`, removed)
+  }
+
+  async restore(path: string, id: string, options?: MutationOptions): Promise<ApiRecord> {
+    this.mutations.push({ method: 'restore', path, id, idempotencyKey: options?.idempotencyKey })
+    this.throwIfFailing()
+    const row = this.trash.get(`${path}/${id}`)
+    if (!row) {
+      throw new ApiProblemError(
+        problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
+      )
+    }
+    this.trash.delete(`${path}/${id}`)
+    this.table(path).push(row)
+    return row
   }
 
   // ── internals ────────────────────────────────────────────────────────────────────────────────

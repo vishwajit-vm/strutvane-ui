@@ -63,7 +63,10 @@ export function parseViewPrefs(text: string | null): ViewPrefs {
 }
 
 /** Read a resource's preferences. Never throws. */
-export function loadViewPrefs(resourcePath: string, storage = browserStorage()): ViewPrefs {
+export function loadViewPrefs(
+  resourcePath: string,
+  storage: PrefsStorage | undefined = browserStorage(),
+): ViewPrefs {
   try {
     return parseViewPrefs(storage?.getItem(KEY_PREFIX + resourcePath) ?? null)
   } catch {
@@ -75,7 +78,7 @@ export function loadViewPrefs(resourcePath: string, storage = browserStorage()):
 export function saveViewPrefs(
   resourcePath: string,
   prefs: ViewPrefs,
-  storage = browserStorage(),
+  storage: PrefsStorage | undefined = browserStorage(),
 ): boolean {
   try {
     if (!storage) return false

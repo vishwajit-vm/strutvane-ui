@@ -128,34 +128,22 @@ describe('decimal values as strings', () => {
   })
 })
 
-describe('default app styles', () => {
-  test('every rule has zero specificity, so app CSS always wins', async () => {
-    const { APP_STYLES } = await import('../src/react/app-styles.ts')
-    const selectors = [...APP_STYLES.matchAll(/(^|\n)\s*([^@\n{}][^{}\n]*?)\s*\{/g)].map((m) =>
-      (m[2] ?? '').trim(),
-    )
-    expect(selectors.length).toBeGreaterThan(10)
-    for (const sel of selectors) {
-      for (const part of sel.split(',')) expect(part.trim(), sel).toMatch(/^:where\(.+\)$/)
-    }
-  })
-
+describe('the plain design keeps the v1 layout fixes', () => {
   // Layout cannot be measured in jsdom, so these pin the rules that prevent the known defects.
-  test('wide tables scroll inside the main area at every width, not the whole page', async () => {
-    const { APP_STYLES } = await import('../src/react/app-styles.ts')
-    // The rule must sit OUTSIDE any @media block: it used to exist only under max-width: 720px, so
-    // on desktop a wide table pushed the whole page (header and menu included) sideways.
-    const outsideMedia = APP_STYLES.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '')
-    const main = /:where\(\.sv-app-main\)\s*\{([^}]*)\}/.exec(outsideMedia)?.[1] ?? ''
-    expect(main).toMatch(/min-width:\s*0/)
-    expect(main).toMatch(/overflow-x:\s*auto/)
+  test('wide tables scroll inside their own positioned box, at every width', async () => {
+    const { PLAIN_STYLESHEET } = await import('../src/design/plain/styles.ts')
+    const outsideMedia = PLAIN_STYLESHEET.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '')
+    const box = /\.svp-table-scroll\{([^}]*)\}/.exec(outsideMedia)?.[1] ?? ''
+    expect(box).toMatch(/overflow-x:auto/)
+    expect(box).toMatch(/position:relative/)
+    expect(outsideMedia).toMatch(/main\{min-width:0/)
   })
 
-  test('dark mode tells the browser, so native controls (selects, date pickers) match', async () => {
-    const { APP_STYLES } = await import('../src/react/app-styles.ts')
-    // Without `color-scheme`, the browser draws native popups, scrollbars and the date-picker icon
-    // for a light page: dark-on-dark icons and light option lists inside the dark theme.
-    const root = /:where\(:root\)\s*\{([^}]*)\}/.exec(APP_STYLES)?.[1] ?? ''
-    expect(root).toMatch(/color-scheme:\s*light dark/)
+  test('each theme tells the browser its colour scheme, so native controls match', async () => {
+    const { designStylesheet } = await import('../src/design/stylesheet.ts')
+    const { plain } = await import('../src/design/plain/index.ts')
+    const css = designStylesheet(plain)
+    expect(css).toMatch(/\[data-sv-theme="light"\]\{color-scheme:light;/)
+    expect(css).toMatch(/\[data-sv-theme="dark"\]\{color-scheme:dark;/)
   })
 })

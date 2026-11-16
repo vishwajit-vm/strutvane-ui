@@ -70,9 +70,9 @@ describe('relation picker with more than 100 records', () => {
     expect(pages).toHaveLength(3)
     expect(pages[0]).toEqual({
       sort: [{ field: 'name', direction: 'asc' }],
-      page: { kind: 'cursor', size: 100 },
+      page: { kind: 'offset', size: 100, number: 1 },
     })
-    expect(pages[1]?.page).toMatchObject({ kind: 'cursor', size: 100, cursor: expect.any(String) })
+    expect(pages[1]?.page).toEqual({ kind: 'offset', size: 100, number: 2 })
   })
 
   test('search goes to the server (debounced) and narrows the options', async () => {
@@ -142,7 +142,7 @@ describe('relation picker with more than 100 records', () => {
     )
     await screen.findByRole('option', { name: 'Urgent' })
     expect(screen.queryByRole('searchbox')).toBeNull()
-    expect(api.requests[0]?.query).toEqual({ page: { kind: 'cursor', size: 100 } })
+    expect(api.requests[0]?.query).toEqual({ page: { kind: 'offset', size: 100, number: 1 } })
   })
 })
 

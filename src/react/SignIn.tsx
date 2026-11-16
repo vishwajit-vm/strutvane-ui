@@ -78,7 +78,7 @@ export function SignInForm(props: SignInFormProps): ReactElement {
           {props.notice}
         </Alert>
       ) : null}
-      <Field label={t('ui.app.email')} htmlFor={`${id}-email`} required>
+      <Field label={t('ui.app.email')} htmlFor={`${id}-email`} required={false}>
         <Input
           id={`${id}-email`}
           type="email"
@@ -90,7 +90,7 @@ export function SignInForm(props: SignInFormProps): ReactElement {
           aria-invalid={error ? true : undefined}
         />
       </Field>
-      <Field label={t('ui.app.password')} htmlFor={`${id}-password`} required>
+      <Field label={t('ui.app.password')} htmlFor={`${id}-password`} required={false}>
         <Input
           id={`${id}-password`}
           type="password"

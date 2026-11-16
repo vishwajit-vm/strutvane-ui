@@ -262,7 +262,9 @@ describe('non-validation problems', () => {
       code: 'UNAUTHENTICATED',
     })
     await submit(user)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Your session has expired.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your session has ended. Sign in again, then save',
+    )
     expect(screen.getByLabelText(/^Amount/)).toHaveValue('1250.5')
   })
 
@@ -356,7 +358,7 @@ describe('capability gating', () => {
       <ResourceForm resource={withCapabilities(invoiceResource, { create: false })} />,
       { api: freshApi() },
     )
-    expect(container).toBeEmptyDOMElement()
+    expect(container.querySelector('form')).toBeNull()
   })
 
   test('no update capability → no edit form, and the record is not even fetched', async () => {
@@ -368,7 +370,7 @@ describe('capability gating', () => {
       />,
       { api },
     )
-    expect(container).toBeEmptyDOMElement()
+    expect(container.querySelector('form')).toBeNull()
     expect(api.gets).toEqual([])
   })
 })

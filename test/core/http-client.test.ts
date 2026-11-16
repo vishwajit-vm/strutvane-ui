@@ -181,7 +181,7 @@ describe('failures never crash and always carry a Problem', () => {
   test('an HTML error page maps by status', async () => {
     const { fetch } = stub(new Response('<html>Bad gateway</html>', { status: 502 }))
     const problem = await catchProblem(
-      createHttpClient({ baseUrl: 'https://api.test', fetch }).get('a', '1'),
+      createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 }).get('a', '1'),
     )
     expect(problem).toMatchObject({ status: 502, code: 'INTERNAL_ERROR' })
   })
@@ -230,7 +230,7 @@ describe('failures never crash and always carry a Problem', () => {
   test('network failure → status 0 NETWORK_ERROR with the cause', async () => {
     const cause = new TypeError('Failed to fetch')
     const { fetch } = stub(cause)
-    const e = await createHttpClient({ baseUrl: 'https://api.test', fetch })
+    const e = await createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 })
       .get('a', '1')
       .catch((err: unknown) => err)
     expect(e).toBeInstanceOf(ApiProblemError)
@@ -245,7 +245,9 @@ describe('failures never crash and always carry a Problem', () => {
       })
     const { fetch } = stub(broken)
     expect(
-      await catchProblem(createHttpClient({ baseUrl: 'https://api.test', fetch }).get('a', '1')),
+      await catchProblem(
+        createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 }).get('a', '1'),
+      ),
     ).toMatchObject({
       code: 'NETWORK_ERROR',
     })

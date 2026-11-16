@@ -382,9 +382,12 @@ describe('useListQuery', () => {
     expect(result.current.rejected).toEqual([
       { key: 'filter[secret][eq]', reason: 'unknown_field' },
     ])
-    expect(result.current.listQuery).toEqual({ search: 'acme', page: { kind: 'cursor', size: 25 } })
+    expect(result.current.listQuery).toEqual({
+      search: 'acme',
+      page: { kind: 'offset', size: 25, number: 1 },
+    })
     expect(result.current.searchString).toBe('search=acme')
-    expect(result.current.hasPrevious).toBe(false)
+    expect(result.current.state.page).toBe(1)
   })
 
   test('a URL page size wins over the default option', () => {

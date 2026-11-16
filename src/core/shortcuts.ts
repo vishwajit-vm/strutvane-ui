@@ -63,7 +63,10 @@ export function documentHasModal(): boolean {
  * @example
  * shortcutBlocked(eventFromTheSearchBox) // true: the person is typing
  */
-export function shortcutBlocked(event: ShortcutEventLike, modalOpen = documentHasModal()): boolean {
+export function shortcutBlocked(
+  event: ShortcutEventLike,
+  modalOpen: boolean = documentHasModal(),
+): boolean {
   if (event.defaultPrevented || event.isComposing === true) return true
   if (event.ctrlKey || event.altKey || event.metaKey) return true
   if (isTypingTarget(event.target)) return true

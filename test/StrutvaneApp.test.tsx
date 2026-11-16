@@ -2,7 +2,7 @@
 // The app shell end to end against a fake Strutvane API: sign-in (wrong password, rate limit),
 // workspace auto-selection, menu, list → detail → edit routing, app routes, unknown paths, and a
 // 401 mid-session returning to the sign-in screen. Plus accessibility checks.
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createSessionClient } from '../src/core/session-client.ts'
@@ -120,15 +120,7 @@ const settled = async (server: FakeServer) => {
 }
 
 const app = (server: FakeServer, extra: Partial<Parameters<typeof StrutvaneApp>[0]> = {}) =>
-  render(
-    <StrutvaneApp
-      apiUrl="/api/v1"
-      appName="Northwind"
-      fetch={server.fetch}
-      styles={false}
-      {...extra}
-    />,
-  )
+  render(<StrutvaneApp apiUrl="/api/v1" appName="Northwind" fetch={server.fetch} {...extra} />)
 
 describe('<StrutvaneApp>', () => {
   it('signs in (wrong password, then rate limit, then success) and auto-selects the only workspace', async () => {
@@ -204,19 +196,40 @@ describe('<StrutvaneApp>', () => {
     )
   })
 
-  it('a 401 in the middle of a session returns to sign-in with a notice; sign-out works', async () => {
+  it('a 401 mid-session opens "sign in again" over the page; the same person keeps the page', async () => {
     const server = fakeServer({ signedIn: true })
     app(server)
     const user = userEvent.setup()
     await settled(server)
-    const link = await screen.findByRole('link', { name: 'Customers' })
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' })
     server.failNext = 401
-    await user.click(link)
-    expect(
-      await screen.findByText('Your session has ended. Please sign in again.'),
-    ).toBeInTheDocument()
-    server.signedIn = true
-    window.history.replaceState(null, '', '/')
+    server.signedIn = false
+    await user.click(within(nav).getByRole('link', { name: 'Customers' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Sign in again' })
+    expect(dialog).toHaveAccessibleDescription('Your session has ended. Please sign in again.')
+    // The page behind is kept (a form would keep its draft), not swapped for the sign-in screen.
+    expect(screen.getByRole('heading', { name: 'Customers', level: 1 })).toBeInTheDocument()
+    expect(await axeViolations(document.body)).toEqual([])
+    await user.type(within(dialog).getByLabelText('Email'), 'ada@example.com')
+    await user.type(within(dialog).getByLabelText('Password'), 'correct-password')
+    await user.click(within(dialog).getByRole('button', { name: 'Sign in' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await screen.findByText('Acme GmbH')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/customers')
+  })
+
+  it('"sign in again" can also leave: Sign out shows the full sign-in screen', async () => {
+    const server = fakeServer({ signedIn: true })
+    app(server)
+    const user = userEvent.setup()
+    await settled(server)
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' })
+    server.failNext = 401
+    await user.click(within(nav).getByRole('link', { name: 'Customers' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Sign in again' })
+    await user.click(within(dialog).getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('heading', { name: 'Sign in to Northwind' })).toBeInTheDocument()
+    expect(screen.getByText('Your session has ended. Please sign in again.')).toBeInTheDocument()
   })
 
   it('offers a workspace switcher when the user has several, and signs out', async () => {

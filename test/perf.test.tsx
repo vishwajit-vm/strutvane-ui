@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { ApiRecord, ResourceApi } from '../src/core/types.ts'
 import { ResourceList, virtualWindow } from '../src/react/ResourceList.tsx'
 import { invoiceResource } from './fixtures/manifest.ts'
-import { customers, makeInvoices, renderWithUI } from './helpers.tsx'
+import { customers, makeInvoices, renderWithUI, showing } from './helpers.tsx'
 
 const ROWS = 500
 const invoices: ApiRecord[] = makeInvoices(ROWS)
@@ -38,7 +38,7 @@ async function measure(virtualizeThreshold: number) {
     />,
     { api: bulkApi },
   )
-  await screen.findByText(`Showing ${ROWS} invoices`)
+  await screen.findByText(showing(ROWS))
   const ms = performance.now() - t0
   const bodyRows = utils.container.querySelectorAll('tbody tr:not([data-sv-spacer])').length
   const table = utils.container.querySelector('table')

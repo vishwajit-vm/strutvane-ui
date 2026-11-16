@@ -10,7 +10,7 @@ import { ResourceList, type ResourceListProps } from '../src/react/ResourceList.
 import type { Cell } from '../src/react/types.ts'
 import { type FakeApi, problem } from './fixtures/fake-api.ts'
 import { invoiceResource, withCapabilities } from './fixtures/manifest.ts'
-import { axeViolations, renderWithUI, seededApi } from './helpers.tsx'
+import { axeViolations, renderWithUI, seededApi, showing } from './helpers.tsx'
 
 const lastQuery = (api: FakeApi) => api.requests.filter((r) => r.path === 'invoices').at(-1)?.query
 
@@ -19,7 +19,7 @@ async function renderList(props: Partial<ResourceListProps> = {}, api = seededAp
     <ResourceList resource={invoiceResource} onCreate={() => {}} onEdit={() => {}} {...props} />,
     { api },
   )
-  await screen.findByText('Showing 25 invoices')
+  await screen.findByText(showing(25))
   return { ...utils, api, user: userEvent.setup() }
 }
 
@@ -69,7 +69,7 @@ describe('ResourceList renders from the manifest', () => {
   test('without ui.listColumns, up to 6 simple fields are shown (no ids, arrays or long text)', async () => {
     const { listColumns: _omit, ...ui } = invoiceResource.ui ?? {}
     renderWithUI(<ResourceList resource={{ ...invoiceResource, ui }} />)
-    await screen.findByText('Showing 25 invoices')
+    await screen.findByText(showing(25))
     expect(headerTexts(screen.getByRole('table'))).toEqual([
       'Number',
       'Customer',
@@ -118,7 +118,7 @@ describe('ResourceList → ListQuery', () => {
     expect(screen.getByRole('list', { name: 'Active filters' })).toHaveTextContent(
       'Status is any of draft, sent',
     )
-    expect(await screen.findByText('Showing 20 invoices')).toBeInTheDocument() // 30 seeded, 10 paid
+    expect(await screen.findByText(showing(20))).toBeInTheDocument() // 30 seeded, 10 paid
 
     await user.click(
       screen.getByRole('button', { name: 'Remove filter: Status is any of draft, sent' }),
@@ -162,25 +162,61 @@ describe('ResourceList → ListQuery', () => {
     const before = api.requests.length
     await user.type(screen.getByLabelText('Search Invoices'), 'INV-1029')
     await waitFor(() => expect(lastQuery(api)?.search).toBe('INV-1029'))
-    await screen.findByText('Showing 1 invoices')
+    await screen.findByText(showing(1))
     expect(api.requests.length - before).toBeLessThanOrEqual(2)
   })
 
-  test('cursor pagination: Next sends the cursor, Previous returns to page 1', async () => {
+  test('numbered pages: "Showing 1–25 of 30", page buttons, Next and Previous', async () => {
     const { api, user } = await renderList()
+    expect(screen.getByText('Showing 1–25 of 30 invoices')).toBeInTheDocument()
+    const pages = screen.getByRole('navigation', { name: 'Invoices pagination' })
+    expect(within(pages).getByRole('button', { name: 'Page 1' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() =>
-      expect(lastQuery(api)?.page).toMatchObject({
-        kind: 'cursor',
-        size: 25,
-        cursor: expect.any(String),
-      }),
+      expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 25, number: 2 }),
     )
-    await screen.findByText('Showing 5 invoices')
+    await screen.findByText('Showing 26–30 of 30 invoices')
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Previous page' }))
-    await waitFor(() => expect(lastQuery(api)?.page).toEqual({ kind: 'cursor', size: 25 }))
+    await user.click(within(pages).getByRole('button', { name: 'Page 1' }))
+    await waitFor(() =>
+      expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 25, number: 1 }),
+    )
+  })
+
+  test('rows per page: 10/25/50/100, back to page 1, never above maxPerPage', async () => {
+    const { api, user } = await renderList({}, seededApi(60))
+    await user.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByText('Showing 26–50 of 60 invoices')
+    const select = screen.getByLabelText('Rows per page')
+    expect([...(select as HTMLSelectElement).options].map((o) => o.value)).toEqual([
+      '10',
+      '25',
+      '50',
+      '100',
+    ])
+    await user.selectOptions(select, '50')
+    await waitFor(() =>
+      expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 50, number: 1 }),
+    )
+  })
+
+  test("a resource's maxPerPage caps the page size and the choices", async () => {
+    const api = seededApi(60)
+    renderWithUI(
+      <ResourceList
+        resource={{ ...invoiceResource, maxPerPage: 20 } as typeof invoiceResource}
+        pageSize={100}
+      />,
+      { api },
+    )
+    await screen.findByText('Showing 1–20 of 60 invoices')
+    expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 20, number: 1 })
+    const select = screen.getByLabelText('Rows per page') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['10', '20'])
   })
 
   test('list state is reported as a URL search string for the router', async () => {
@@ -199,7 +235,7 @@ describe('ResourceList → ListQuery', () => {
       />,
       { api },
     )
-    await screen.findByText('Showing 10 invoices')
+    await screen.findByText(showing(10))
     expect(lastQuery(api)).toMatchObject({
       filter: { op: 'eq', field: 'status', value: 'paid' },
       sort: [{ field: 'amount', direction: 'desc' }],
@@ -215,19 +251,19 @@ describe('ResourceList → ListQuery', () => {
       />,
       { api },
     )
-    await screen.findByText('Showing 10 invoices')
+    await screen.findByText(showing(10))
     const q = lastQuery(api)
     expect(q?.filter).toBeUndefined()
     expect(q?.sort).toBeUndefined()
-    expect(q?.page).toEqual({ kind: 'cursor', size: 10 })
+    expect(q?.page).toEqual({ kind: 'offset', size: 10, number: 1 })
   })
 
   test('the pageSize prop sets the first request size (clamped to 100)', async () => {
     const api = seededApi(150)
     renderWithUI(<ResourceList resource={invoiceResource} pageSize={500} />, { api })
-    await screen.findByText('Showing 100 invoices')
+    await screen.findByText(showing(100))
     expect(api.requests.filter((r) => r.path === 'invoices').map((r) => r.query.page)).toEqual([
-      { kind: 'cursor', size: 100 },
+      { kind: 'offset', size: 100, number: 1 },
     ])
   })
 })
@@ -240,7 +276,7 @@ describe('capabilities and overrides', () => {
   test('no create/update/delete capability → no New, Edit or Delete buttons', async () => {
     await renderList({
       resource: withCapabilities(invoiceResource, { create: false, update: false, delete: false }),
-      confirmDelete: () => true,
+      deletable: true,
     })
     expect(screen.queryByRole('button', { name: /New invoice/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Edit / })).toBeNull()
@@ -249,22 +285,27 @@ describe('capabilities and overrides', () => {
   })
 
   test('with capabilities → New, and Edit + Delete per row labelled by the record title', async () => {
-    await renderList({ confirmDelete: () => true })
+    await renderList({ deletable: true })
     expect(screen.getByRole('button', { name: 'New invoice' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit INV-1000' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete INV-1000' })).toBeInTheDocument()
   })
 
-  test('delete asks first; cancel sends nothing, confirm deletes with an idempotency key and refreshes', async () => {
-    const confirmDelete = vi
-      .fn<() => boolean>()
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true)
+  test('delete asks first; Cancel sends nothing; a permanent delete needs the name typed', async () => {
     const onDeleted = vi.fn()
-    const { api, user } = await renderList({ confirmDelete, onDeleted })
+    const { api, user } = await renderList({ deletable: true, onDeleted })
     await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
+    let dialog = await screen.findByRole('alertdialog', { name: 'Delete INV-1000?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(api.mutations).toEqual([])
     await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
+    dialog = await screen.findByRole('alertdialog', { name: 'Delete INV-1000?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Delete' })
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Type INV-1000 to confirm'), 'INV-100')
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Type INV-1000 to confirm'), '0')
+    await user.click(confirm)
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1))
     expect(api.mutations).toEqual([
       { method: 'delete', path: 'invoices', id: 'inv-0001', idempotencyKey: expect.any(String) },
@@ -274,14 +315,43 @@ describe('capabilities and overrides', () => {
     )
   })
 
-  test('a failed delete shows a banner and the retry reuses the same idempotency key', async () => {
-    const { api, user } = await renderList({ confirmDelete: () => true })
-    api.failNext({ ...problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'), traceId: 't-1' })
+  test('a soft delete offers Undo, which restores the record', async () => {
+    const soft = {
+      ...invoiceResource,
+      softDeletes: true,
+      capabilities: { ...invoiceResource.capabilities, restore: true },
+    }
+    const api = seededApi()
+    renderWithUI(<ResourceList resource={soft} deletable />, { api })
+    await screen.findByText(showing(25))
+    const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Delete INV-1000?' })
+    expect(dialog).toHaveAccessibleDescription(
+      'INV-1000 moves to deleted records. You can undo this right after.',
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await screen.findByText('INV-1000 was deleted.')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await screen.findByText('INV-1000 was restored.')
+    expect(api.mutations.map((m) => m.method)).toEqual(['delete', 'restore'])
+    await screen.findByRole('button', { name: 'Delete INV-1000' })
+  })
+
+  test('a failed delete shows a banner and the retry reuses the same idempotency key', async () => {
+    const { api, user } = await renderList({ deletable: true })
+    api.failNext({ ...problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'), traceId: 't-1' })
+    const remove = async () => {
+      await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
+      const dialog = await screen.findByRole('alertdialog')
+      await user.type(within(dialog).getByRole('textbox'), 'INV-1000')
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    }
+    await remove()
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not delete INV-1000. The service is temporarily unavailable.',
     )
-    await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
+    await remove()
     await waitFor(() => expect(api.mutations).toHaveLength(2))
     expect(api.mutations[1]?.idempotencyKey).toBe(api.mutations[0]?.idempotencyKey)
   })
@@ -290,7 +360,7 @@ describe('capabilities and overrides', () => {
     renderWithUI(<ResourceList resource={invoiceResource} />, {
       overrides: { fieldCells: { 'Invoice.amount': MoneyCell } },
     })
-    await screen.findByText('Showing 25 invoices')
+    await screen.findByText(showing(25))
     expect(screen.getAllByTestId('money')).toHaveLength(25)
     expect(screen.getAllByTestId('money')[1]).toHaveTextContent('€37')
   })
@@ -299,10 +369,10 @@ describe('capabilities and overrides', () => {
     renderWithUI(<ResourceList resource={invoiceResource} />, {
       overrides: {
         cells: { date: DateText },
-        messages: { 'ui.list.showing': '{count} {resource} found' },
+        messages: { 'ui.list.showingRange': '{to} of {total} {resource} found' },
       },
     })
-    await screen.findByText('25 invoices found')
+    await screen.findByText('25 of 30 invoices found')
     expect(screen.getAllByTestId('date')[0]).toHaveTextContent('2026-12-01')
   })
 })
@@ -348,13 +418,13 @@ describe('error states', () => {
 
   test('an empty result says so', async () => {
     renderWithUI(<ResourceList resource={invoiceResource} />, { api: seededApi(0) })
-    expect(await screen.findByText('No invoices match these filters.')).toBeInTheDocument()
+    expect(await screen.findByText('No invoices yet.')).toBeInTheDocument()
   })
 })
 
 describe('accessibility', () => {
   test('axe: no violations on the loaded list (color-contrast needs a real browser)', async () => {
-    const { container } = await renderList({ confirmDelete: () => true })
+    const { container } = await renderList({ deletable: true })
     await waitFor(() => expect(screen.getAllByText('Acme GmbH').length).toBeGreaterThan(0))
     expect(await axeViolations(container)).toEqual([])
   })
@@ -425,7 +495,7 @@ describe('the list follows URL changes made outside it (menu link, back/forward)
       />,
       { api },
     )
-    await screen.findByText('Showing 10 invoices')
+    await screen.findByText(showing(10))
     expect(screen.getByRole('searchbox')).toHaveValue('INV')
     // What the list reported comes back from the router: no reset, no extra request.
     const requests = api.requests.length
@@ -434,35 +504,40 @@ describe('the list follows URL changes made outside it (menu link, back/forward)
     expect(api.requests.length).toBe(requests)
     // A different URL from outside (the menu link `/invoices`): the list resets to it.
     act(() => url.set(''))
-    await screen.findByText('Showing 30 invoices')
+    await screen.findByText(showing(30))
     expect(lastQuery(api)?.filter).toBeUndefined()
     expect(lastQuery(api)?.search).toBeUndefined()
-    expect(lastQuery(api)?.page).toEqual({ kind: 'cursor', size: 50 }) // the pageSize prop still applies
+    expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 50, number: 1 }) // the pageSize prop still applies
     expect(screen.queryByRole('list', { name: 'Active filters' })).toBeNull()
     expect(screen.getByRole('searchbox')).toHaveValue('')
     // And Back to the filtered URL restores it.
     act(() => url.set('filter[status][eq]=paid'))
-    await screen.findByText('Showing 10 invoices')
+    await screen.findByText(showing(10))
     expect(lastQuery(api)?.filter).toEqual({ op: 'eq', field: 'status', value: 'paid' })
   })
 })
 
 describe('hostile or stale list URLs', () => {
-  test('a page opened by link (a cursor in the URL) can go back to page 1', async () => {
+  test('a page opened by link (page[number] in the URL) loads that page and can go back', async () => {
     const api = seededApi()
-    const cursor = btoa(JSON.stringify({ o: 25 }))
-    renderWithUI(
-      <ResourceList resource={invoiceResource} initialSearch={`page[cursor]=${cursor}`} />,
-      {
-        api,
-      },
-    )
-    await screen.findByText('Showing 5 invoices')
+    renderWithUI(<ResourceList resource={invoiceResource} initialSearch="page[number]=2" />, {
+      api,
+    })
+    await screen.findByText('Showing 26–30 of 30 invoices')
     const previous = screen.getByRole('button', { name: 'Previous page' })
     expect(previous).toBeEnabled()
     await userEvent.setup().click(previous)
-    await screen.findByText('Showing 25 invoices')
-    expect(lastQuery(api)?.page).toEqual({ kind: 'cursor', size: 25 })
+    await screen.findByText(showing(25))
+    expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 25, number: 1 })
+  })
+
+  test('an old cursor link is dropped (fail closed) and the first page loads', async () => {
+    const api = seededApi()
+    renderWithUI(<ResourceList resource={invoiceResource} initialSearch="page[cursor]=abc" />, {
+      api,
+    })
+    await screen.findByText(showing(25))
+    expect(lastQuery(api)?.page).toEqual({ kind: 'offset', size: 25, number: 1 })
   })
 
   test('the search box cannot hold more than the server accepts', async () => {
