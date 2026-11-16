@@ -1,8 +1,8 @@
 /**
  * The reference screens: the real `<StrutvaneApp>` on the reference API, rendered with a design
  * into jsdom, in the states that matter for accessibility and layout (sign-in, a list, an empty
- * list, the delete confirmation, a form with errors, a record, the command palette, the shortcuts
- * help).
+ * list, the delete confirmation, a form with errors, a record, a record with a related list, the
+ * command palette, the shortcuts help).
  *
  * Rendering uses `react-dom/client` and `act` directly, so the kit needs no testing library. It
  * must run in a DOM environment (`// @vitest-environment jsdom`).
@@ -25,6 +25,7 @@ export const REFERENCE_SCREENS = [
   'delete-dialog',
   'form-errors',
   'detail',
+  'related',
   'palette',
   'shortcuts',
 ] as const
@@ -93,6 +94,7 @@ const PATHS: Readonly<Record<ReferenceScreen, string>> = {
   'delete-dialog': '/posts',
   'form-errors': '/posts/new',
   detail: '/posts/launch-notes-1',
+  related: '/authors/1',
   palette: '/posts',
   shortcuts: '/posts',
 }
@@ -175,6 +177,9 @@ export async function renderReferenceScreen(
       }
       case 'detail':
         await until(() => has('[data-sv-part="details"]'), 'the record', timeout)
+        break
+      case 'related':
+        await until(() => has('[data-sv-part="related"] tbody tr'), 'the related list', timeout)
         break
     }
   } catch (error) {

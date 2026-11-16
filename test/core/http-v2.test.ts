@@ -77,7 +77,7 @@ describe('CSRF header on writes', () => {
 describe('retry on reads only', () => {
   test('a GET is retried after a 503 and after no answer, then succeeds', async () => {
     const { fetch, calls } = stub(problemResponse(503), new TypeError('offline'), list())
-    const sleep = vi.fn(instant)
+    const sleep = vi.fn((_ms: number, _signal?: AbortSignal) => instant())
     const api = createHttpClient({ baseUrl: 'https://api.test', fetch, sleep })
     expect((await api.list('posts', {})).data).toHaveLength(1)
     expect(calls).toHaveLength(3)

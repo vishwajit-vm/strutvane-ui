@@ -89,7 +89,9 @@ function parseOklch(value: string): LinearRgb | undefined {
   const m = /^oklch\((.*)\)$/i.exec(value)
   if (!m?.[1]) return undefined
   // Keep a calc() hue together while splitting on spaces.
-  const [main = '', alphaText] = m[1].split('/')
+  const slashParts = m[1].split('/')
+  if (slashParts.length > 2) return undefined
+  const [main = '', alphaText] = slashParts
   const tokens = main.trim().match(/calc\([^)]*\)|\S+/g) ?? []
   if (tokens.length !== 3) return undefined
   const [lText = '', cText = '', hText = ''] = tokens

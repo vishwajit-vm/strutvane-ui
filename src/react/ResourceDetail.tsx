@@ -158,7 +158,8 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
         const child = manifest.resources.find((r) => r.name === field.relation?.target)
         if (!child || !field.relation) return null
         return (
-          <section key={field.name} data-sv-part="related" aria-label={field.label}>
+          // Not a landmark itself: the embedded list is the "Posts" region (landmark names must be unique).
+          <div key={field.name} data-sv-part="related">
             <h2>{field.label}</h2>
             <ResourceList
               resource={child}
@@ -169,7 +170,7 @@ export function ResourceDetail(props: ResourceDetailProps): ReactElement {
                 ? { onView: (r: ApiRecord) => props.onOpenRelated?.(child, r) }
                 : {})}
             />
-          </section>
+          </div>
         )
       })}
       {removal.dialog}
