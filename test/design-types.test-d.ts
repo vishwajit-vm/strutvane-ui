@@ -16,6 +16,7 @@ import { defineDesign } from '../src/design/index.ts'
 import { plain } from '../src/design/plain/index.ts'
 
 const base: DesignDefinition = plain
+const Wrong: ComponentType<{ readonly label: number }> = () => null
 
 describe('defineDesign', () => {
   test('a complete definition compiles and returns a Design', () => {
@@ -38,7 +39,6 @@ describe('defineDesign', () => {
   })
 
   test('a slot with the wrong props fails to compile', () => {
-    const Wrong: ComponentType<{ readonly label: number }> = () => null
     // @ts-expect-error the Button skin must accept ButtonProps
     const skins: SkinSlots = { ...plain.skins, Button: Wrong }
     expectTypeOf(skins).toExtend<SkinSlots>()

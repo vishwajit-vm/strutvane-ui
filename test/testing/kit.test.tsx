@@ -27,6 +27,41 @@ import {
   renderReferenceScreen,
 } from '../../src/testing/index.ts'
 
+/** A page that breaks every overflow rule. */
+function Bad(): ReactElement {
+  return (
+    <div>
+      <style>{'.scroll{overflow-x:auto} main{min-width:auto}'}</style>
+      <main>
+        <table>
+          <tbody />
+        </table>
+        <div className="scroll">
+          <table>
+            <tbody />
+          </table>
+        </div>
+        <div style={{ width: '500px' }} />
+      </main>
+    </div>
+  )
+}
+
+/** A Field skin that forgets <label htmlFor>: the inputs lose their accessible names. */
+function NoLabel(props: FieldProps): ReactElement {
+  return (
+    <div>
+      <span>{props.label}</span>
+      {props.children}
+    </div>
+  )
+}
+
+/** A shell that never shows the page. */
+function Empty(_: ShellProps): ReactElement {
+  return <div />
+}
+
 /** The plain design with some parts replaced, bypassing defineDesign (as a JS design could). */
 const broken = (over: Record<string, unknown>): Design => ({ ...plain, ...over }) as Design
 const withLight = (color: Partial<ThemeTokens['color']>): Design =>
@@ -224,22 +259,6 @@ describe('overflow at 375 px', () => {
   })
 
   test('DOM: tables must scroll inside a positioned box; main must shrink; no wide inline widths', async () => {
-    const Bad = (): ReactElement => (
-      <div>
-        <style>{'.scroll{overflow-x:auto} main{min-width:auto}'}</style>
-        <main>
-          <table>
-            <tbody />
-          </table>
-          <div className="scroll">
-            <table>
-              <tbody />
-            </table>
-          </div>
-          <div style={{ width: '500px' }} />
-        </main>
-      </div>
-    )
     const screen = await mount(<Bad />)
     try {
       expect(checkOverflowDom(screen.container)).toEqual([
@@ -256,13 +275,6 @@ describe('overflow at 375 px', () => {
 
 describe('axe on the reference screens', () => {
   test('a skin that drops the wiring it is given is caught', async () => {
-    // A Field skin that forgets <label htmlFor>: the inputs lose their accessible names.
-    const NoLabel = (props: FieldProps): ReactElement => (
-      <div>
-        <span>{props.label}</span>
-        {props.children}
-      </div>
-    )
     const screen = await renderReferenceScreen(
       broken({ skins: { ...plain.skins, Field: NoLabel } }),
       'sign-in',
@@ -276,7 +288,6 @@ describe('axe on the reference screens', () => {
   })
 
   test('a shell that never shows the page times out with a clear message', async () => {
-    const Empty = (_: ShellProps): ReactElement => <div />
     await expect(
       renderReferenceScreen(broken({ shell: { ...plain.shell, Shell: Empty } }), 'detail', {
         timeout: 300,
@@ -332,7 +343,7 @@ describe('the reference API', () => {
     )
     expect(page.body?.['meta']).toEqual({ page: { size: 5, number: 2, hasMore: false, total: 10 } })
     const authors = await call(api, '/api/authors?search=asha&filter[id][eq]=1')
-    expect((authors.body?.['data'] as unknown[]).length).toBe(1)
+    expect((authors.body?.['data'] as unknown[] | undefined)?.length).toBe(1)
     expect((await call(api, '/api/posts?page[size]=60')).status).toBe(422)
     expect((await call(api, '/api/nope')).status).toBe(404)
   })

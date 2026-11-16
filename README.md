@@ -2,7 +2,7 @@
 
 # Strutvane UI
 
-**Metadata-driven frontend for Strutvane and any OpenAPI backend: data tables, forms, filters and error handling rendered from the resource manifest, with typed override registries and components you own.**
+**The behaviour of the Strutvane admin: auto CRUD screens, the sidebar, the command palette, shortcuts and every UX convenience, rendered from the resource manifest through a design you choose.**
 
 [![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange)](https://github.com/vishwajit-vm/strutvane/blob/main/docs/14-roadmap.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -12,194 +12,157 @@
 </div>
 
 > [!NOTE]
-> **Status: renderer core implemented and tested (`0.1.0-next.0`), not yet released to npm.** This release covers the Phase 1 renderer core from [ADR-0014](https://github.com/vishwajit-vm/strutvane/blob/main/docs/adr/0014-ui-from-manifest-with-registries.md): lists, forms, filters, errors and overrides. Routing, layouts, auth screens, themes, the component registry and UI-only mode come later (see [the roadmap](https://github.com/vishwajit-vm/strutvane/blob/main/docs/14-roadmap.md)). The APIs may still change before `0.1.0`.
+> **Status: 0.2 (v2) in pre-release (`next`).** v2 splits the UI into behaviour (this package) and look (a design package: Crisp, Vivid, or your own). Upgrading from 0.1? Read [docs/migrating-from-v1.md](docs/migrating-from-v1.md).
 
 ## What it is
 
-Strutvane UI is part of **[Strutvane](https://github.com/vishwajit-vm/strutvane)**, a TypeScript framework and package ecosystem for building enterprise B2B applications. You declare models as fields and types, and get migrations, a secured CRUD API, auth/RBAC/tenancy and a complete UI. Every line stays owned, overridable TypeScript.
+Strutvane UI is part of **[Strutvane](https://github.com/vishwajit-vm/strutvane)**, a TypeScript framework and package ecosystem for enterprise B2B applications: declare models, run one command, get migrations, a secured CRUD API, auth, RBAC, tenancy and a complete UI.
 
-This package renders that UI. It reads the resource manifest (`GET /.well-known/strutvane.json`) and draws a list page and a create/edit form for every resource, with zero per-resource UI code. It talks to the backend only over HTTP, so it never imports `@strutvane/framework` or `@strutvane/auth`.
+This package is that UI's **behaviour**. It reads the resource manifest (`GET /.well-known/strutvane.json`) and draws a list, detail, create and edit page for every resource, plus the sidebar, with zero per-resource code. It has **no look of its own**: every pixel comes from a **design** (`defineDesign()`), so switching from Crisp to Vivid changes every screen without touching one. It talks to the backend only over HTTP.
 
 ## Entry points
 
 | Import | Contents | Needs React? |
 |---|---|---|
-| `@strutvane/ui/core` | Manifest client, list-query URL format, the filter builder, list state, client validation, issue routing, problem handling, message formatting, widget/cell registries, the HTTP client | No |
-| `@strutvane/ui/react` | `<StrutvaneProvider>`, `<ResourceList>`, `<ResourceForm>`, `<FieldShell>`, `<FilterBar>`, default widgets and cells, hooks | Yes |
-| `@strutvane/ui` | Same as `@strutvane/ui/core` | No |
+| `@strutvane/ui/react` | `<StrutvaneApp>` (the whole admin), `<StrutvaneProvider>`, `<ResourceList>`, `<ResourceForm>`, `<ResourceDetail>`, `<CommandPalette>`, `<ModalDialog>`, widgets, cells, hooks | Yes |
+| `@strutvane/ui/design` | The Design contract: `defineDesign()`, `<DesignProvider>`, tokens, slot prop types, `designStylesheet()` | Yes (the provider) |
+| `@strutvane/ui/design/plain` | `plain`: the neutral fallback design | Yes |
+| `@strutvane/ui/testing` | `designConformance()` (vitest) and the reference app | Yes, plus vitest and axe-core |
+| `@strutvane/ui/core`, `@strutvane/ui` | Manifest client, list-query URL format, filter builder, validation, problems, messages, HTTP and session clients (with the CSRF header), the sidebar model, the shortcut rule, list preferences | No |
 
-React 19 and the TanStack packages (Query, Table, Form, Virtual) are **peer dependencies**, needed only for `@strutvane/ui/react`. The only runtime dependency is `@strutvane/contracts`, which is types plus a few constants.
+Peer dependencies: **`@strutvane/framework`** (required: the shared contracts live in `@strutvane/framework/contracts`), React 19 and the TanStack packages for `./react`, vitest and axe-core for `./testing`. Node `>=24.3`.
 
-## Quick start: the whole app
-
-`<StrutvaneApp>` is the complete UI of a Strutvane app (what `web/app.tsx` renders): sign-in,
-workspace picker and switcher, a menu of every resource the user may list, and list, create,
-detail and edit pages for each, all permission-aware and built from the API's manifest.
+## Quick start
 
 ```tsx
-import { type RouteDefinition, StrutvaneApp } from '@strutvane/ui/react'
+import { StrutvaneApp, type RouteDefinition } from '@strutvane/ui/react'
+import { crisp } from '@strutvane/design-crisp'
 
 const routes: RouteDefinition[] = [{ path: '/reports', title: 'Reports', element: <Reports /> }]
 
 export function App() {
-  return <StrutvaneApp apiUrl={import.meta.env.VITE_API_URL} appName="Acme" routes={routes} />
+  return (
+    <StrutvaneApp
+      apiUrl="/api"
+      appName="Acme"
+      design={crisp}                 // default: the plain design
+      brand={{ brandHue: 150 }}      // the public override tokens
+      nonce={window.__cspNonce}      // with a strict CSP (decision #119)
+      routes={routes}
+    />
+  )
 }
 ```
 
 | Prop | Default | |
 |---|---|---|
-| `apiUrl` | (required) | API base, e.g. `/api/v1`; the manifest is read from the same origin |
-| `appName` | `Strutvane` | Header, document title and sign-in screen |
-| `routes` | `[]` | Your screens (`{ path, element, title? }`, `:params` allowed); they win over resource routes, and those with a `title` appear in the menu |
+| `apiUrl` | (required) | API base, e.g. `/api`; the manifest is read from the same origin |
+| `appName` | `Strutvane` | Sidebar, document title and sign-in screen |
+| `design`, `brand`, `nonce` | plain, none, none | The design, the public override tokens (`brandHue`, `fontSans`, `radius`, `density`), the CSP nonce of the injected stylesheet. Ignored inside your own `<DesignProvider>` |
+| `routes` | `[]` | Your screens (`{ path, element, title?, icon?, group?, order? }`); they win over resource routes; those with a `title` join the sidebar |
+| `sidebar`, `can` | none | Pages added by packages (`{ name, label, path, icon, group, order, badge?, permission }`), shown when `can(permission)` is true |
 | `home` | a welcome | What `/` shows |
-| `overrides`, `locale` | | Widgets, cells and messages (L1/L2), as for `<StrutvaneProvider>` |
-| `auth` | `true` | Use the `@strutvane/auth` session endpoints (`/auth/me`, `/sign-in`, `/tenants`, `/switch-tenant`); `false` for an API without them |
-| `credentials` | `same-origin` | `include` when the UI is served from another origin than the API |
-| `styles` | `true` | Inject `APP_STYLES` (themable through `--sv-*` CSS variables) |
+| `overrides`, `locale` | | Widgets, cells and messages (L1/L2) |
+| `auth` | `true` | Use the `@strutvane/auth` session endpoints; `false` for an API without them |
+| `credentials`, `headers`, `xsrf`, `fetch` | | Transport: cookie policy, extra headers, CSRF settings (`false` for bearer APIs), a custom fetch |
 
-Routes: `/:resource` (list), `/:resource/new`, `/:resource/:id` (detail, with related lists for
-`hasMany` relations whose foreign key is filterable), `/:resource/:id/edit`. A 401 from any request
-returns to the sign-in screen with a notice; a sign-out the server did not confirm (offline, 5xx)
-keeps you signed in and says so, so a live session never hides behind the sign-in screen; unknown paths and resources the user cannot see show
-the same "not found or no access" page. The pieces are exported too: `Router`, `Link`,
-`useRouter`, `matchPath`, `ResourceDetail`, `SignIn`, and `createSessionClient` from
-`@strutvane/ui/core`.
+Routes: `/:resource`, `/:resource/new`, `/:resource/:key`, `/:resource/:key/edit`, where `:key` is the record's route key (a slug, decision #55) or its id.
 
-## Quick start: single screens
+## Designs
 
 ```tsx
-import { createHttpClient, fetchManifest } from '@strutvane/ui/core'
-import { ResourceForm, ResourceList, StrutvaneProvider } from '@strutvane/ui/react'
-import { QueryClient } from '@tanstack/react-query'
+import { DesignProvider } from '@strutvane/ui/design'
+import { plain } from '@strutvane/ui/design/plain'
 
-const api = createHttpClient({ baseUrl: 'https://api.example.com/api/v1', credentials: 'include' })
-const manifest = await fetchManifest({ baseUrl: 'https://api.example.com', credentials: 'include' })
-const invoices = manifest.resources.find((r) => r.name === 'Invoice')!
-const queryClient = new QueryClient()
-
-export function App() {
-  return (
-    <StrutvaneProvider api={api} manifest={manifest} queryClient={queryClient}>
-      <ResourceList
-        resource={invoices}
-        initialSearch={location.search}
-        onSearchStringChange={(s) => history.replaceState(null, '', s ? `?${s}` : location.pathname)}
-        onCreate={() => navigate('/invoices/new')}
-        onEdit={(row) => navigate(`/invoices/${row.id}/edit`)}
-        confirmDelete={(row) => confirm(`Delete ${row.number}?`)}
-      />
-    </StrutvaneProvider>
-  )
-}
-
-// /invoices/new  →  <ResourceForm resource={invoices} onSaved={(r) => navigate(`/invoices/${r.id}`)} />
-// /invoices/:id  →  <ResourceForm resource={invoices} recordId={id} onSaved={…} onCancel={…} />
+<DesignProvider design={plain} theme="system" overrides={{ brandHue: 200, radius: '10px' }} nonce={nonce}>
+  {/* any Strutvane screens */}
+</DesignProvider>
 ```
+
+A design provides tokens for light and dark, sizes, fonts, the shell (`Shell`, `Sidebar`, `TopBar`, `AuthLayout`, `PageHeader`), sixteen component skins, a chart palette and four illustrations. Apps brand any design with four public tokens: `--brand-hue`, `--font-sans`, `--radius` and `--density`. To build one, read **[docs/design-contract.md](docs/design-contract.md)**; every design must pass:
+
+```ts
+// @vitest-environment jsdom
+import { designConformance } from '@strutvane/ui/testing'
+designConformance(myDesign, { sources: ['src'], tokenFiles: ['src/tokens.ts'] })
+```
+
+It checks every slot, WCAG AA contrast for every token pair in both themes (at every brand hue), no hard-coded colours, that each public token changes the result, no horizontal overflow at 375 px, and axe with 0 violations on nine reference screens.
 
 ## What you get
 
-**Lists (`<ResourceList>`)**
+**Navigation**
+- A sidebar from the manifest: one entry per resource the viewer may list, grouped, ordered (`order`, then A to Z, ungrouped first), with badges; a drawer on phones.
+- **Breadcrumbs** and **Back** on every page: Back returns to the list with its page, filters and sort (they live in the URL); on a direct link it goes to the parent page instead of leaving the app.
+- **Command palette** (Ctrl/Cmd+K or `/`): screens, records (searched on the server, only what the viewer may see) and actions (New post, switch theme, shortcuts).
+- **Shortcuts:** `?` help, `g d` home, `n` new, `e` edit, Alt+← back. Single keys never fire while typing or under a dialog.
 
-- Columns from `ui.listColumns` (or up to six sensible fields). Cells per field type: numbers, dates and datetimes (in the viewer's time zone) through `Intl`, Yes/No, relation titles.
-- Filtering, search, sorting and pagination all **run on the server**. The table never sorts or filters locally.
-- **Sorting:** the first click is always ascending, on every column.
-- **Filter chips:** you can only pick a field's allowed operators, and every value is validated before it is sent.
-- **Search** is debounced. **Pagination** uses cursors, with Previous and Next.
-- **Deep links:** list state round-trips through the URL in the ADR-0011 wire format (`filter[status][in]=draft&filter[status][in]=sent&sort=-dueDate&page[size]=50`). Parameters the resource does not allow are dropped and reported, never sent.
-- **Virtualization** above 100 rows. A container that cannot be measured still shows the first rows.
-- **New, Edit and Delete** buttons appear only when the manifest's capabilities allow them for this user. Delete asks first and sends an idempotency key.
+**Lists**
+- Server-side filtering, search, sort and **numbered pages** (25 by default; 10/25/50/100, never above the resource's `maxPerPage`), "Showing 26–50 of 312 posts".
+- **Filter chips** for the search and every filter, each removable, plus Clear all.
+- A **Columns** menu and **compact rows**, remembered per viewer.
+- **Delete** with a confirmation: type the name for a permanent delete; **Undo** after a soft delete.
+- New, Edit and Delete appear only when the manifest allows them (the API still enforces every rule).
 
-**Forms (`<ResourceForm>`)**
+**Forms**
+- Widgets per field type (decimals keep what you typed; datetimes in your time zone; JSON as JSON; a searchable, paginated relation picker).
+- Client validation from the manifest; server 422 issues land on the right field (`path`, then `field`, decision #118).
+- The **unsaved-changes guard**: leaving a changed form (a link, Back, Escape, the browser's Back) asks first; reload and close use the browser's prompt.
+- One submission at a time; idempotency keys reused while the outcome is unknown.
+- A **401 keeps the draft** and opens "Sign in again" over the form.
 
-- **Widgets per field type:**
-  - text, email, URL and phone
-  - textarea
-  - number and decimal: what you typed is kept, so `1250.` is not swallowed, and the locale's decimal comma is accepted
-  - enum select, checkbox, date, and datetime (shown and edited in the viewer's time zone, sent as an ISO-8601 instant in UTC)
-  - JSON (`type: "json"`): a textarea whose text is parsed, so the API receives the JSON value itself, never the text as a string; text that does not parse is refused before sending
-  - a read-only display
-  - a **belongsTo picker** that searches on the server and pages 100 records at a time with "Load more", so every record is reachable
-  - repeatable groups for `array` fields
-- **Validation:**
-  - Client validation comes from the manifest (`required`, `minimum`/`maximum`, `minLength`/`maxLength`, `pattern`, enums, real calendar dates). It uses the same message catalog as the server.
-  - Server `422` issues land on the deepest rendered field (e.g. `lines[1].amount`), else its parent field, else the form banner. No message is ever dropped, and each is shown once.
-  - Focus moves to the first invalid field, or to the banner.
-- **Other errors** (`401`, `403`, `404`, `409`, `429`, `5xx`, offline, malformed responses) show a friendly banner from the catalog, never raw internals. A 5xx shows a support reference (`traceId`). Your typed values are always kept.
-- **Idempotent retries:** one `Idempotency-Key` per user action. It is reused while the outcome is unknown (network error, 5xx, 429) and replaced after success or a definitive 4xx answer.
-- **Edit mode:** `readOnly` and `writeOnce` fields are respected. Edit mode sends only the fields that changed.
+**Safety**
+- Writes send `X-XSRF-TOKEN` from the `XSRF-TOKEN` cookie (decision #17). Reads are retried twice on no answer or a 5xx; writes never are.
+- Problems are never shown raw: friendly catalogue messages, a trace reference for 5xx, a clear message for `write_cancelled` (#103). Codes match in any case (#68).
+- A crashing cell or widget is contained to itself (error boundaries).
+- Sign-out shows the sign-in screen only after the server confirmed it.
 
-**Accessibility (WCAG 2.2 AA is release-blocking)**
-
-- **Built in once:** `<FieldShell>` wires label, help text, `aria-invalid` and `aria-describedby` for every widget, including your overrides.
-- **Lists:** tables have captions, `scope="col"` and `aria-sort`. Pagination is labelled, and result counts are announced politely.
-- **Tested:** axe-core runs in the test suite on lists, forms, filter errors and server-error states (colour contrast needs a real browser and is checked there).
+**Accessibility (WCAG 2.2 AA is release-blocking):** real tables with captions and `aria-sort`, labelled landmarks, focus management on page changes and in dialogs, polite announcements, and axe in the test suite on every screen.
 
 ## Overrides (L1 / L2)
 
-Override any widget or cell through the provider, with no fork. Overrides are merged on top of the defaults:
-
 ```tsx
-import type { Cell, Widget } from '@strutvane/ui/react'
-
-const Money: Cell = ({ value, record }) => <>{formatMoney(value, record.currency)}</>
-const MoneyInput: Widget = ({ id, value, onChange, onBlur, describedBy, invalid }) => (
-  <input id={id} value={String(value ?? '')} aria-describedby={describedBy} aria-invalid={invalid}
-         onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
-)
-
 <StrutvaneProvider
   api={api}
   manifest={manifest}
   overrides={{
-    fieldCells: { 'Invoice.amount': Money },          // one column of one resource
-    widgets: { money: MoneyInput },                   // every field of type money
-    messages: { required: '{attribute} is mandatory.' }, // any catalog message or UI text
+    fieldCells: { 'Invoice.amount': Money },              // one column of one resource
+    widgets: { money: MoneyInput },                       // every field of type money
+    messages: { required: '{attribute} is mandatory.' },  // any catalogue message or UI text
   }}
 />
 ```
 
-Every cell and every widget renders inside its own `RenderBoundary`: an override (or a value of an unexpected shape) that throws shows "Cannot display this value" in that one cell, or a notice in that one field, instead of blanking the screen. Widgets resolve `Resource.field` → named widget (`field.widget`) → field type → `default`. Cells resolve `Resource.field` → field type → `default`. A widget renders only its control: put `id` on it and pass `describedBy` to `aria-describedby`, and it is fully accessible.
+Widgets resolve `Resource.field` → `field.widget` → field type → `default`; cells resolve `Resource.field` → field type → `default`. A widget renders only its control: put `id` on it and pass `describedBy` to `aria-describedby`.
 
-## Using the core without React
+## Manifest fields the UI reads (RFC-0005, proposed)
 
-```ts
-import { buildFilter, parseSearchString, routeIssues, toSearchString } from '@strutvane/ui/core'
-
-const { state, rejected } = parseSearchString(location.search, invoices) // fails closed, reports why
-const chip = buildFilter(amountField, 'between', ['10', '99.5'])          // { ok: true, filter } or { ok: false, reason }
-const { fieldErrors, formErrors } = routeIssues(problem.issues ?? [], new Set(renderedFieldNames))
-```
-
-The same filter builder serves URL parsing, the filter bar and programmatic filters. The UI therefore can never send a filter that the descriptor does not allow.
+Optional on each resource: `maxPerPage` (1–100), `routeKey` (a unique slug/uuid field used in URLs), `ui.order` and `ui.badge` (sidebar). Absent or malformed values are ignored, so the UI works with any framework version. See [docs/rfcs/0005-manifest-ui-fields.md](docs/rfcs/0005-manifest-ui-fields.md).
 
 ## Development
 
 ```bash
-corepack pnpm@12.18.0 install
-corepack pnpm@12.18.0 run ci      # lint → typecheck → tests + coverage → build
+npm install
+npm run ci      # lint → typecheck → tests + coverage → build
 ```
 
-Tests use Vitest. Core tests run in Node. React tests use jsdom, Testing Library, user-event and axe-core, and fast-check covers the parsers and the formatter. Coverage thresholds are 90/90/85/90.
+Tests use Vitest: core tests in Node, React tests in jsdom with Testing Library, user-event and axe-core; fast-check covers the parsers. Coverage thresholds are 90/90/85/90.
 
 ## Works alone, better together
 
 | Package | Role |
 |---------|------|
-| [`@strutvane/framework`](https://github.com/vishwajit-vm/strutvane-framework) | Backend & database core |
-| [`@strutvane/auth`](https://github.com/vishwajit-vm/strutvane-auth) | Authentication, authorization, tenancy, audit |
-| [`@strutvane/ui`](https://github.com/vishwajit-vm/strutvane-ui) | Metadata-driven frontend |
-| [`@strutvane/core`](https://github.com/vishwajit-vm/strutvane-core) | Kernel: container, providers, config, context |
-| [`@strutvane/contracts`](https://github.com/vishwajit-vm/strutvane-contracts) | Shared types and wire protocols |
-| [`strutvane` / `@strutvane/cli`](https://github.com/vishwajit-vm/strutvane-cli) | Unified CLI |
-| [`@strutvane/devkit`](https://github.com/vishwajit-vm/strutvane-devkit) | SDK for installers, generators and plugins |
-| [`@strutvane/logs`](https://github.com/vishwajit-vm/strutvane-logs) | Zero-config logging + built-in log viewer (default) |
+| [`@strutvane/framework`](https://github.com/vishwajit-vm/strutvane-framework) | Backend, database, contracts and CLI |
+| [`@strutvane/auth`](https://github.com/vishwajit-vm/strutvane-auth) | Sign-in, tokens, 2FA, teams |
+| [`@strutvane/ui`](https://github.com/vishwajit-vm/strutvane-ui) | The admin's behaviour (this package) |
+| `@strutvane/design-crisp`, `@strutvane/design-vivid` | The admin's look |
 | [`create-strutvane`](https://github.com/vishwajit-vm/create-strutvane) | Project starter |
 
 ## Documentation
 
-- **Package specification:** [08-package-ui.md](https://github.com/vishwajit-vm/strutvane/blob/main/docs/08-package-ui.md)
-- **Decisions:** [ADR-0014](https://github.com/vishwajit-vm/strutvane/blob/main/docs/adr/0014-ui-from-manifest-with-registries.md) (renderer and registries), [ADR-0011](https://github.com/vishwajit-vm/strutvane/blob/main/docs/adr/0011-openapi-pipeline-and-typed-client.md) (list-query wire format), [RFC-0003](https://github.com/vishwajit-vm/strutvane/blob/main/docs/rfcs/0003-errors-and-messages.md) (errors and messages)
-- **Ecosystem blueprint:** [strutvane/docs](https://github.com/vishwajit-vm/strutvane/tree/main/docs), starting with the [executive summary](https://github.com/vishwajit-vm/strutvane/blob/main/docs/00-executive-summary.md)
+- [docs/design-contract.md](docs/design-contract.md): building a design
+- [docs/migrating-from-v1.md](docs/migrating-from-v1.md): 0.1 → 0.2
+- Blueprint: [18 v2 §5.1 designs](https://github.com/vishwajit-vm/strutvane/blob/main/docs/18-v2-blueprint.md), [19 production readiness](https://github.com/vishwajit-vm/strutvane/blob/main/docs/19-production-readiness.md)
 
 ## Contributing
 

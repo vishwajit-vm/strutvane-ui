@@ -58,7 +58,8 @@
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
-    "docs"
+    "docs/design-contract.md",
+    "docs/migrating-from-v1.md"
   ],
   "engines": {
     "node": ">=24.3"

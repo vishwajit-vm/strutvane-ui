@@ -10,73 +10,71 @@ The file below is synced from strutvane-tooling and is identical in every repo. 
 
 ## What this repo is
 
-Metadata-driven frontend for Strutvane and any OpenAPI backend: auto-generated routes, data tables, forms, filters and detail pages, auth screens, layouts and themes, with components you own.
-
-It is one repo of the **Strutvane** polyrepo ecosystem (one GitHub repo per package; see ADR-0002). The hub with the full blueprint is https://github.com/vishwajit-vm/strutvane. Locally it is the umbrella folder two levels up: `../../docs/`.
+The **behaviour** of the Strutvane admin: auto CRUD screens from the resource manifest, the sidebar,
+the command palette, shortcuts and every UX convenience. It has **no look of its own**: everything
+renders through a design (`defineDesign()`, blueprint §5.1). It also defines the Design contract and
+the conformance kit that Crisp, Vivid and community designs implement.
 
 ## Status
 
-- **Renderer core and app shell implemented and tested: `0.1.0-next.0` (changesets pre mode `next`), not released.** It covers ADR-0014's Phase 1 scope (lists, forms, filters, errors, overrides) plus the app shell (`StrutvaneApp.tsx`, `router.tsx`, `ResourceDetail.tsx`, `SignIn.tsx`, `core/session-client.ts`). Full layouts, more auth screens (reset, MFA), themes, the shadcn registry, `@strutvane/ui/vite|installer|testing` and UI-only mode come later.
-- The source of truth for decisions is `../../docs/00-executive-summary.md`. If anything here conflicts with it, that file wins.
-- The package spec is `../../docs/08-package-ui.md`. The key decisions are ADR-0014 (renderer and registries), ADR-0011 (list-query wire format) and RFC-0003 §4 (form failure behaviour).
-- **TEMPORARY:** `pnpm-workspace.yaml` overrides `@strutvane/contracts` to `link:../contracts` until contracts `0.1.0-next.0` is on npm (ADR-0016). Remove the override once it is published.
+- **v2 on branch `v2/behaviour` (0.2 line, `next`), not released.** v1 (`0.1.0-next.0`) is on npm.
+- Gates: hub `docs/19-production-readiness.md` (R1–R9); evidence in `RELEASE-READINESS.md`.
+- `@strutvane/framework` is a required peer (contracts at `@strutvane/framework/contracts`). Until
+  `0.1.0-next.1` is on npm, `package-lock.json` has no framework entry: run `npm install` after it
+  ships. Locally a dev copy of the contracts sits in `node_modules/@strutvane/framework`.
+- Manifest fields `maxPerPage`, `routeKey`, `ui.order`, `ui.badge`: read when present, ignored
+  otherwise (`docs/rfcs/0005-manifest-ui-fields.md`, proposed).
 
 ## Commands
 
 ```bash
-corepack pnpm@12.18.0 install
-corepack pnpm@12.18.0 run ci        # biome → tsc → vitest --coverage → tsdown (must pass before commit)
-node_modules/.bin/vitest run test/ResourceForm.test.tsx   # one file while iterating
-npx --yes publint@0.3.15 --pack npm # package.json / exports check
+npm install
+npm run ci                                   # biome → tsc → vitest --coverage → tsdown
+npx vitest run test/conveniences.test.tsx    # one file while iterating
+node .github/scripts/check-code-rules.mjs && node .github/scripts/check-package.mjs
 node ../tooling/scripts/sync.mjs --repo ui   # re-sync shared configs from tooling
 ```
 
 ## Structure
 
-- `src/core/`: framework-free and never imports React, so a future Vue renderer can reuse it.
-  - `manifest-client.ts`: fetch and validate the manifest defensively.
-  - `filter-builder.ts`: the ONE filter builder (URL + filter bar).
-  - `list-state.ts`: reducer with a cursor stack.
-  - `list-query-url.ts`: ADR-0011 URL format, plus the `POST /query` decision.
-  - `validation.ts`: client rules from the manifest.
-  - `issues.ts`: deepest field → parent → banner.
-  - `problems.ts`: sanitize untrusted problem bodies; banner text from the catalog.
-  - `messages.ts`: catalog plus a safe ICU subset formatter.
-  - `registry.ts`: generic widget/cell resolution.
-  - `record-batcher.ts`: batched relation labels.
-  - `http-client.ts`: `fetch` wrapper with idempotency keys.
-  - `ids.ts`, `types.ts` (`ResourceApi`).
-- `src/react/`:
-  - `StrutvaneProvider.tsx`; `context.ts` (hooks, no default-registry import, so no import cycles).
-  - `ResourceList.tsx`, `ResourceForm.tsx`, `FieldShell.tsx`, `FilterBar.tsx`.
-  - `widgets.tsx`, `cells.tsx`, `relations.ts`, `useListQuery.ts`, `defaults.ts`, `types.ts`.
-- `test/core/*.test.ts` run in Node. `test/*.test.tsx` declare `// @vitest-environment jsdom` and import `test/helpers.tsx` (providers, seed data, axe).
-  - `test/fixtures/`: manifest plus an in-memory `FakeApi` that validates like the server.
-  - `test/types.test-d.ts`: type-level tests.
+- `src/core/`: framework-free (no React). Manifest client (+ `resource-extensions.ts` for the v2
+  fields), list-query URL format, the ONE filter builder, list state (numbered pages), validation,
+  issue routing, problems, messages, registry, record batcher, HTTP and session clients (`xsrf.ts`),
+  the sidebar model (`navigation.ts`), the shortcut rule (`shortcuts.ts`), list preferences.
+- `src/design/`: the contract: `tokens.ts`, `slots.ts`, `define-design.ts`, `stylesheet.ts`,
+  `color.ts`, `DesignProvider.tsx`; `plain/` is the fallback design (colour literals only in
+  `plain/tokens.ts`).
+- `src/react/`: behaviour components, rendering only through `useSkins()` / `useShellSlots()`.
+- `src/testing/`: `designConformance()`, the pure checks, the reference API and screens.
+- `docs/`: `design-contract.md` (for design authors), `migrating-from-v1.md`, `rfcs/`.
 
 ## Invariants (tests guard these)
 
-- **Server-side list operations:** TanStack Table uses `manualSorting` and `sortDescFirst: false`, so the first click is always ascending.
-- **One filter builder:** every filter goes through `buildFilter`. Unknown fields, operators and parameters are dropped and reported, never sent.
-- **Number widget:** keeps the draft text, so the decimal point is never swallowed.
-- **Messages:** each message is shown once. Server errors are cleared on edit and before a resubmit.
-- **Focus:** requested through state plus an effect (never before render). It goes to the first invalid field, else the banner.
-- **Virtualization:** a fail-safe window, so the table is never empty when data exists.
-- **Problems:** no response shape can crash the UI. 5xx details are never shown.
-- **Idempotency keys:** kept while the outcome is unknown, rotated after success or a 4xx.
-- **Capabilities:** gate every New, Edit and Delete action, and the forms. The API still enforces.
+- **No look here:** no colour literal outside `src/design/plain/tokens.ts` (the conformance kit
+  scans `src/design/plain`); behaviour markup carries `data-sv-part` hooks, never classes with style.
+- **Server-side list operations:** `manualSorting`, `sortDescFirst: false` (first click ascending).
+- **One filter builder:** unknown fields, operators and parameters are dropped and reported.
+- **Page sizes** never exceed the resource's `maxPerPage` (lists, pickers, the batcher, the palette).
+- **Writes** carry `X-XSRF-TOKEN` and an idempotency key; only reads are retried.
+- **Shortcuts** obey `shortcutBlocked`: never while typing or under a modal.
+- **Dialogs** trap focus and return it; Cancel / Keep editing get focus in confirmations.
+- **A 401** opens "sign in again" over the page; a different person clears every cached record.
+- **Landmark names are unique** on every screen (axe `landmark-unique`).
+- **Number widget** keeps the draft text; datetimes in the viewer's time zone; one form submission
+  at a time; render errors contained per cell/widget; sign-out only after the server confirms.
 
 ## Boundaries (non-negotiable)
 
-- Allowed dependencies: `@strutvane/contracts` (and `@strutvane/core` for the server-side bits). It must never import `@strutvane/framework` or `@strutvane/auth`; it talks to them over HTTP using the resource manifest and OpenAPI.
-- Cooperation with other Strutvane packages happens **only through `@strutvane/contracts`**, resolved at runtime via the core container.
+- Dependencies: `@strutvane/framework` (contracts only, at runtime) as a peer. It talks to the
+  framework and `@strutvane/auth` over HTTP (manifest, REST, session endpoints), never imports them.
+- Designs depend on this package; this package never imports a design except `plain`.
 - Public API changes need a changeset, docs and tests. Contract changes need an RFC.
 
 ## Conventions
 
 - TypeScript strict, ESM only, Node 24+ (Node 26 LTS is the target). No decorators or reflection.
 - Validation uses Standard Schema with Zod 4 as the default. Errors are RFC 9457 problem+json.
-- Tooling: pnpm, tsdown (build), Biome (lint/format), Vitest (tests), Playwright (UI e2e), Testcontainers (DB).
+- Tooling: npm, tsdown (build), Biome (lint/format), Vitest (tests), Playwright (UI e2e), Testcontainers (DB).
 - Code generation and AST work pin the TypeScript 6 compiler API (`@typescript/typescript6`), because TypeScript 7 has no compiler API.
 - Releases: Changesets, npm trusted publishing (OIDC) with provenance. Core packages share a major release train.
 - **Docker is local-only and never committed** (ADR-0006). Never commit `.env`; keep `.env.example` complete and documented.

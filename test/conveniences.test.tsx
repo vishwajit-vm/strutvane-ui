@@ -29,6 +29,7 @@ const onList = () => screen.findByRole('region', { name: 'Posts table' })
 
 beforeEach(() => {
   localStorage.clear()
+  // biome-ignore lint/suspicious/noDocumentCookie: the test plays the framework, which sets this cookie.
   document.cookie = 'XSRF-TOKEN=; max-age=0'
 })
 afterEach(() => window.history.replaceState(null, '', '/'))
@@ -170,6 +171,7 @@ describe('list conveniences', () => {
   })
 
   test('a soft delete sends the CSRF header, and Undo restores the record', async () => {
+    // biome-ignore lint/suspicious/noDocumentCookie: the test plays the framework, which sets this cookie.
     document.cookie = 'XSRF-TOKEN=csrf-123'
     const { api, user } = start('/posts')
     await onList()
