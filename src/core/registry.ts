@@ -12,7 +12,7 @@
  *
  * @module
  */
-import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/framework/contracts'
 import { defaultMessages, type MessageCatalog } from './messages.ts'
 
 /** A component lookup table. */

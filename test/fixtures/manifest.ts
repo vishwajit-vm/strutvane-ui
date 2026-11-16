@@ -8,7 +8,7 @@ import type {
   ResourceCapabilities,
   ResourceDescriptor,
   ResourceManifest,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 
 export const ALL: ResourceCapabilities = {
   list: true,

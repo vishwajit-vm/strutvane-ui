@@ -9,8 +9,8 @@
  *
  * @module
  */
-import type { FieldDescriptor, ListQuery, ResourceDescriptor } from '@strutvane/contracts'
-import { LIST_QUERY_LIMITS } from '@strutvane/contracts'
+import type { FieldDescriptor, ListQuery, ResourceDescriptor } from '@strutvane/framework/contracts'
+import { LIST_QUERY_LIMITS } from '@strutvane/framework/contracts'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { createRecordBatcher, type RecordBatcher } from '../core/record-batcher.ts'

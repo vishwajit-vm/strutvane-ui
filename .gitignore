@@ -17,7 +17,7 @@ coverage/
 *.pem
 *.key
 
-# Docker: local development only, never committed (ADR-0006)
+# Docker: Strutvane repos never commit Docker files (ADR-0006; ADR-0021 lets generated apps opt in, not us)
 docker/
 Dockerfile*
 .dockerignore
@@ -27,7 +27,9 @@ docker-compose*.yml
 docker-compose*.yaml
 
 # Logs & OS / editor files
-logs/
+# Anchored to the repo root: a bare "logs/" also ignored any nested logs folder (e.g. a package
+# or source folder named logs), so new files there were silently never added (dry run B1).
+/logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*

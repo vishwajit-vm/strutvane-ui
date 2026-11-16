@@ -3,7 +3,7 @@
  *
  * @module
  */
-import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/framework/contracts'
 import type { ComponentType } from 'react'
 import type { Registry, RegistryOverrides } from '../core/registry.ts'
 import type { ApiRecord } from '../core/types.ts'

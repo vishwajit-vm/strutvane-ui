@@ -15,7 +15,7 @@
  *
  * @module
  */
-import type { IssueParam, Problem, ValidationIssue } from '@strutvane/contracts'
+import type { IssueParam, Problem, ValidationIssue } from '@strutvane/framework/contracts'
 import { formatMessage, type MessageCatalog } from './messages.ts'
 
 /** Code used for transport failures (no HTTP response at all). UI-only; never sent by servers. */

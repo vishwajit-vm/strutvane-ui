@@ -27,7 +27,7 @@ import type {
   Problem,
   ResourceDescriptor,
   ValidationIssue,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 import { useForm } from '@tanstack/react-form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {

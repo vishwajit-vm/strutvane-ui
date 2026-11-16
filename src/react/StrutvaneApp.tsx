@@ -26,7 +26,7 @@
  *
  * @module
  */
-import type { ResourceDescriptor, ResourceManifest } from '@strutvane/contracts'
+import type { ResourceDescriptor, ResourceManifest } from '@strutvane/framework/contracts'
 import { QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   type ReactElement,

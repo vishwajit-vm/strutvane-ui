@@ -19,7 +19,7 @@
  *
  * @module
  */
-import type { ListQuery, ListResult, PageInfo, Problem } from '@strutvane/contracts'
+import type { ListQuery, ListResult, PageInfo, Problem } from '@strutvane/framework/contracts'
 import { createIdempotencyKey } from './ids.ts'
 import { listQueryToSearchString } from './list-query-url.ts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'

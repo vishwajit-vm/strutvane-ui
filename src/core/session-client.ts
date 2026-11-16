@@ -9,7 +9,7 @@
  *
  * @module
  */
-import type { Actor } from '@strutvane/contracts'
+import type { Actor } from '@strutvane/framework/contracts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
 
 /** The signed-in actor as the API reports it (`GET /auth/me`). */

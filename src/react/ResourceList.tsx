@@ -17,7 +17,11 @@
  *
  * @module
  */
-import type { FieldDescriptor, ResourceDescriptor, SortDirective } from '@strutvane/contracts'
+import type {
+  FieldDescriptor,
+  ResourceDescriptor,
+  SortDirective,
+} from '@strutvane/framework/contracts'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type ColumnDef,

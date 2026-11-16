@@ -11,7 +11,12 @@
  *
  * @module
  */
-import type { FieldDescriptor, IssueParam, JsonSchema, ValidationIssue } from '@strutvane/contracts'
+import type {
+  FieldDescriptor,
+  IssueParam,
+  JsonSchema,
+  ValidationIssue,
+} from '@strutvane/framework/contracts'
 import { formatMessage, type MessageCatalog } from './messages.ts'
 
 /** Field types whose values are numbers. */

@@ -16,7 +16,7 @@ import {
   type ResourceDescriptor,
   type ResourceManifest,
   type ValidationIssue,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 import { defaultMessages, formatMessage } from '../../src/core/messages.ts'
 import { ApiProblemError } from '../../src/core/problems.ts'
 import type { ApiRecord, MutationOptions, ResourceApi } from '../../src/core/types.ts'

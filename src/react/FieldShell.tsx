@@ -8,7 +8,7 @@
  *
  * @module
  */
-import type { FieldDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import { type ReactElement, useContext } from 'react'
 import { fieldDomId, uniqueMessages } from '../core/issues.ts'
 import { defaultMessages, formatMessage } from '../core/messages.ts'

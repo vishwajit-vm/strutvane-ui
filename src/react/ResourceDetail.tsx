@@ -12,7 +12,7 @@
  *
  * @module
  */
-import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor, ResourceDescriptor } from '@strutvane/framework/contracts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactElement, useId, useRef, useState } from 'react'
 import { createIdempotencyKey } from '../core/ids.ts'

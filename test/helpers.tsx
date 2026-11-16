@@ -3,7 +3,7 @@
  * Imported only by jsdom test files (they declare `// @vitest-environment jsdom`).
  */
 import '@testing-library/jest-dom/vitest'
-import type { ResourceManifest } from '@strutvane/contracts'
+import type { ResourceManifest } from '@strutvane/framework/contracts'
 import { QueryClient } from '@tanstack/react-query'
 import { cleanup, type RenderResult, render } from '@testing-library/react'
 import axe from 'axe-core'

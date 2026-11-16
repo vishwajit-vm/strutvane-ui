@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Exact numbers travel as strings (a Strutvane decimal is `"1250.50"`, schema `type: "string"`).
 // The list showed "—" for every such value and the form sent numbers the API refuses.
-import type { FieldDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import { fireEvent, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'

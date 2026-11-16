@@ -22,7 +22,7 @@ import {
   type QueryFilter,
   type ResourceDescriptor,
   type SortDirective,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 import {
   buildFilter,
   FIELD_NAME_PATTERN,

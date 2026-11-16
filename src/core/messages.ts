@@ -17,7 +17,7 @@
  *
  * @module
  */
-import type { IssueParam } from '@strutvane/contracts'
+import type { IssueParam } from '@strutvane/framework/contracts'
 
 /** Messages keyed by stable code (`too_small`) or UI key (`ui.list.showing`). */
 export type MessageCatalog = Readonly<Record<string, string>>

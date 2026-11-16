@@ -7,7 +7,7 @@
  *
  * @module
  */
-import type { ListQuery, ResourceDescriptor, SortDirective } from '@strutvane/contracts'
+import type { ListQuery, ResourceDescriptor, SortDirective } from '@strutvane/framework/contracts'
 import { useCallback, useMemo, useReducer, useState } from 'react'
 import type { SimpleFilter } from '../core/filter-builder.ts'
 import { parseSearchString, type RejectedParam, toSearchString } from '../core/list-query-url.ts'

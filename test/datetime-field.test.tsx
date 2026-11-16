@@ -2,7 +2,7 @@
 // Datetime fields (`type: "datetime"`): an INSTANT, exchanged as ISO-8601 with an offset. It must be
 // shown and edited in the viewer's time zone and sent back as an instant; a plain text input showed
 // the raw UTC text, and anything typed without an offset was refused by the API.
-import type { ResourceManifest } from '@strutvane/contracts'
+import type { ResourceManifest } from '@strutvane/framework/contracts'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'

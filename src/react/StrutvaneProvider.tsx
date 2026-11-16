@@ -10,7 +10,7 @@
  *
  * @module
  */
-import type { ResourceManifest } from '@strutvane/contracts'
+import type { ResourceManifest } from '@strutvane/framework/contracts'
 import { type QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, type ReactNode, useMemo } from 'react'
 import { mergeRegistry } from '../core/registry.ts'

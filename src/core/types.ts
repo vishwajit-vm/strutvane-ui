@@ -8,7 +8,7 @@
  *
  * @module
  */
-import type { ListQuery, ListResult } from '@strutvane/contracts'
+import type { ListQuery, ListResult } from '@strutvane/framework/contracts'
 
 /** A record as returned by a Strutvane API: an `id` plus the resource's fields. */
 export interface ApiRecord {

@@ -1,23 +1,30 @@
 # Managed by strutvane-tooling (canonical/.github/workflows/release.yml). Do not edit in package repos:
-# change it in strutvane-tooling and run `pnpm sync` there.
+# change it in strutvane-tooling and run `npm run sync` there.
 #
 # Release flow (ADR-0016, "version on main, CI publishes what's new"; ADR-0018, staged publishing):
-#   1. Contributors add changesets. A maintainer runs `changeset version` and commits
+#   1. Contributors add changesets. A maintainer runs `npx changeset version` and commits
 #      `chore(release): <name>@<version>` on main.
-#   2. On every push to main, this workflow runs the full quality gate, then STAGES each package's
-#      version ONLY if it's neither on npm nor already staged (idempotent). The packages are the
-#      repo root, or, when the root package.json is private, every non-private package listed in
-#      pnpm-workspace.yaml, staged from its own folder in dependency order. The dist-tag comes
-#      from the version: x.y.z → latest, x.y.z-next.N → next, x.y.z-canary.N → canary.
-#   3. A maintainer approves the staged version on npmjs.com with 2FA; only then is it live. A CI run
+#   2. On every push to main, this workflow first runs EVERY production-readiness gate in ci.yml
+#      (hub docs/19: the OS x Node matrix, the repeat run, audit and secrets scan, package-check)
+#      as a called workflow; the release job `needs` it, so a single red gate stages nothing.
+#      Then it runs the full quality gate again on the build it is about to stage, and STAGES the package's
+#      version ONLY if it's neither on npm nor already staged (idempotent). Every repo publishes
+#      exactly one package, from its root. The dist-tag comes from the version: x.y.z → latest,
+#      x.y.z-next.N → next, x.y.z-canary.N → canary.
+#   3. If npm answers 409 (the version already exists), that is a skip, not a failure, but only
+#      after the published tarball's integrity matches this build; a staged-only version is skipped
+#      and this build's integrity is printed for the approver to compare (hub docs/18 §8, security
+#      review F-21).
+#   4. A maintainer approves the staged version on npmjs.com with 2FA; only then is it live. A CI run
 #      alone can never release anything.
-#   4. Staging uses npm TRUSTED PUBLISHING (GitHub OIDC) with provenance. No npm token exists.
-# One-time setup per published package (each workspace package needs its own):
+#   5. Staging uses npm TRUSTED PUBLISHING (GitHub OIDC) with provenance. No npm token exists.
+# One-time setup per published package:
 #   1. npmjs.com → package → Settings → Trusted Publisher → GitHub Actions: owner `vishwajit-vm`,
 #      repository `<this repo>`, workflow `release.yml`, no environment, and BOTH "Allow npm
 #      publish" and "Allow npm dist-tag" left unticked (staged publishing only).
 #   2. GitHub → repo → Settings → Variables → Actions: RELEASE_ENABLED = true.
 # Until step 2 is done this workflow is skipped, so a repo can never try to publish early.
+# Actions are pinned to full commit SHAs (tag in the trailing comment; SHAs checked 2026-11-15).
 name: Release
 
 on:
@@ -33,7 +40,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Every gate in ci.yml, exactly as on pull requests. Same condition as the release job, so a repo
+  # that has not enabled releases doesn't run CI twice on each push.
+  ci:
+    if: github.repository_owner == 'vishwajit-vm' && vars.RELEASE_ENABLED == 'true'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: ci
     if: github.repository_owner == 'vishwajit-vm' && vars.RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -46,28 +62,30 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
       - name: Set up Node 24
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: pnpm
+          cache: npm
           registry-url: https://registry.npmjs.org
 
-      # `npm stage` needs a recent npm; pin it so staging never depends on what the runner bundles.
-      - name: Use an npm with staged publishing
+      # `npm stage` and the .npmrc guards need a recent npm; pin it so staging never depends on
+      # what the runner bundles (ADR-0018).
+      - name: Use npm 11.19.0 (staged publishing)
         run: npm install --global npm@11.19.0
 
-      - name: No local-only dependencies (link:/file:/workspace:)
+      - name: No local-only or non-registry dependencies
         run: node .github/scripts/check-deps.mjs
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Install (exactly the lockfile; install scripts only from the allowlist)
+        run: npm ci
 
+      - name: Verify registry signatures and provenance of installed packages
+        run: npm audit signatures
+
+      # Gated again on this runner: the tarball staged below is built by this exact run.
       - name: Quality gate (never publish a broken build)
-        run: pnpm run ci
+        run: npm run ci
 
       - name: Stage this version if it is new (trusted publishing, provenance; approve on npmjs.com)
         run: node .github/scripts/publish-if-new.mjs

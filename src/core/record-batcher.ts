@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { LIST_QUERY_LIMITS, type ResourceDescriptor } from '@strutvane/contracts'
+import { LIST_QUERY_LIMITS, type ResourceDescriptor } from '@strutvane/framework/contracts'
 import { isApiProblemError } from './problems.ts'
 import type { ApiRecord, ResourceApi } from './types.ts'
 

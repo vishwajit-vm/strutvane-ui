@@ -25,7 +25,7 @@ import {
   type ResourceCapabilities,
   type ResourceDescriptor,
   type ResourceManifest,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 import { FIELD_NAME_PATTERN, isFilterOperator } from './filter-builder.ts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
 

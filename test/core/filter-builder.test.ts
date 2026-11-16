@@ -1,6 +1,6 @@
 // The ONE filter builder: rejects fields and operators the descriptor does not allow, and values
 // that do not fit the field's type. URL parsing and the filter bar both depend on these rules.
-import type { FieldDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
 import {

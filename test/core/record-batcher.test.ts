@@ -1,5 +1,5 @@
 // Batched relation lookups: one request per tick, chunked, failures isolated per chunk.
-import type { ListQuery, ListResult } from '@strutvane/contracts'
+import type { ListQuery, ListResult } from '@strutvane/framework/contracts'
 import { describe, expect, test, vi } from 'vitest'
 import { ApiProblemError } from '../../src/core/problems.ts'
 import { createRecordBatcher } from '../../src/core/record-batcher.ts'

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The belongsTo picker beyond the first 100 records (ADR-0014 follow-up): paginated, searchable,
 // and the selected record always visible. Plus the relation cell with embedded records.
-import type { FieldDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import { screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'

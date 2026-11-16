@@ -1,5 +1,0 @@
-# Our own pre-releases are staged and approved with 2FA (ADR-0018), so they are exempt from
-# pnpm's minimum release age; every third-party package keeps the protection.
-minimumReleaseAgeExclude:
-  - "@strutvane/*"
-  - jsdom@31.0.1

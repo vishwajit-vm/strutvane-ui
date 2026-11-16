@@ -4,28 +4,28 @@
 // package repos. See ADR-0016 ("version on main, CI publishes what's new") and ADR-0018 (staged
 // publishing).
 //
-// STAGES each of this repo's packages on npm (`npm stage publish`) only if its exact version is
-// neither published nor already staged. A maintainer then approves the staged version on
-// npmjs.com with 2FA, so a CI run alone can never make a version live. Safe to re-run
-// (idempotent). Uses npm trusted publishing (OIDC) with provenance; no tokens.
+// STAGES this repo's package on npm (`npm stage publish`) only if its exact version is neither
+// published nor already staged. A maintainer then approves the staged version on npmjs.com with
+// 2FA, so a CI run alone can never make a version live. Safe to re-run (idempotent). Uses npm
+// trusted publishing (OIDC) with provenance; no tokens.
 //
-// Which packages:
-//   - Root package.json not private: that one package, staged from the repo root.
-//   - Root private: every non-private package listed in pnpm-workspace.yaml `packages:` (plain
-//     paths and `dir/*` only; see workspace-packages.mjs), each staged from its own folder, in
-//     dependency order (a package after the workspace packages it depends on). If one fails, the
-//     others are still attempted, except those that depend on it; the run then exits non-zero.
-//     Workspace packages depend on each other by exact published version, never `workspace:`
-//     (check-deps.mjs refuses it), because `npm stage publish` does not rewrite that protocol.
+// One package per repo, published from the repo root (v2 layout, hub docs/18 §3.2). The CLI repo
+// was the only multi-package publisher and it was absorbed into the framework, so the pnpm
+// workspace mode (and workspace-packages.mjs) is retired. A repo that declares workspaces fails
+// closed here instead of silently publishing only its root.
+//
+// "409 = skip" (hub docs/18 §8, refining ADR-0018): if `npm stage publish` is refused because the
+// version already exists (a re-run racing an earlier one, or a staged version `npm stage list`
+// could not show), that is not a failure. But a 409 must never hide a tarball that CI did not
+// build (hub security review F-21), so:
+//   - if the version is PUBLISHED, its registry integrity must equal this build's `npm pack`
+//     integrity, otherwise the run fails;
+//   - if it is only STAGED (not visible yet), the run skips and prints this build's integrity, so
+//     the maintainer can compare it with the staged tarball before approving.
 import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  dependencyNames,
-  listWorkspacePackages,
-  orderByDependencies,
-  readJsonObject,
-} from './workspace-packages.mjs'
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/
@@ -107,129 +107,127 @@ export function stagedVersions(data, name) {
   return [...new Set(found)]
 }
 
-/** @typedef {{ name: string, version: string, dir: string, deps: string[] }} ReleaseTarget */
-
 /**
- * Decide which packages to stage, in order. Pure: takes parsed manifests. Exported for tests.
- * - A non-private root is the only target (`dir: '.'`), exactly as before workspaces existed.
- * - A private root yields its non-private workspace packages, ordered so a package comes after
- *   any other target it depends on (dependencies, peerDependencies, optionalDependencies).
- *   Private workspace packages are never staged. A dependency cycle or a duplicate name throws.
- * @param {Record<string, unknown>} root parsed root package.json
- * @param {readonly import('./workspace-packages.mjs').WorkspacePackage[]} workspace
- * @returns {ReleaseTarget[]}
+ * True if npm's output says the registry refused the version because it already exists (HTTP
+ * 409). npm prints `code E409` and `409 Conflict`; the registry's wording ("cannot publish over
+ * the previously published versions") is matched too. The exact text for a STAGED duplicate is not
+ * documented *(unverified)*, so all three forms are accepted. Exported for tests.
+ * @param {string} output npm's stdout and stderr
  */
-export function releaseTargets(root, workspace) {
-  if (!root['private']) {
-    return [{ name: String(root['name']), version: String(root['version']), dir: '.', deps: [] }]
-  }
-  const publishable = workspace.filter((p) => !p.manifest['private'])
-  /** @type {Set<unknown>} */
-  const names = new Set(publishable.map((p) => p.manifest['name']))
-  const targets = publishable.map(({ dir, manifest }) => {
-    const name = manifest['name']
-    const version = manifest['version']
-    if (typeof name !== 'string' || name === '') {
-      throw new Error(`${dir}/package.json: a publishable package needs a "name"`)
-    }
-    if (typeof version !== 'string' || version === '') {
-      throw new Error(`${dir}/package.json: a publishable package needs a "version"`)
-    }
-    return { name, version, dir, deps: dependencyNames(manifest).filter((d) => names.has(d)) }
-  })
-  return orderByDependencies(targets)
+export function isPublishConflict(output) {
+  return /\bE409\b|\b409 Conflict\b|cannot publish over|previously published/i.test(output)
 }
 
-/** @typedef {'staged' | 'skipped' | 'failed' | 'blocked'} StageStatus */
 /** @typedef {{ status: 'staged' | 'skipped', detail: string } | { status: 'failed', detail: string, code: number }} StageOutcome */
-/** @typedef {{ name: string, version: string, dir: string, status: StageStatus, detail: string }} StageResult */
 
 /**
- * Stage every target in order with `stageOne`, isolating failures. Exported for tests.
- * - A target whose `stageOne` throws or returns `failed` is recorded as `failed`.
- * - A target that depends on a failed or blocked target is not attempted (`blocked`): staging it
- *   would ask a maintainer to approve a version whose dependency was never staged.
- * - Every other target is still attempted.
- * @param {readonly ReleaseTarget[]} targets in dependency order (see releaseTargets)
- * @param {(target: ReleaseTarget) => StageOutcome} stageOne
- * @returns {StageResult[]}
+ * What a 409 means, given this build's tarball integrity and the published one. Pure. Exported
+ * for tests.
+ * - Not published (only staged): skip, and name the integrity the maintainer must see on approval.
+ * - Published with the same integrity: skip (an earlier run of this build already got through).
+ * - Published with another integrity, or ours unknown: fail. A tarball CI did not build must
+ *   never be passed over silently (security review F-21).
+ * @param {{ version: string, localIntegrity: string | undefined, publishedIntegrity: string | undefined }} input
+ * @returns {StageOutcome}
  */
-export function stageAll(targets, stageOne) {
-  /** @type {Set<string>} */
-  const broken = new Set()
-  /** @type {StageResult[]} */
-  const results = []
-  for (const target of targets) {
-    const { name, version, dir } = target
-    const blockers = target.deps.filter((d) => broken.has(d))
-    if (blockers.length > 0) {
-      broken.add(name)
-      results.push({
-        name,
-        version,
-        dir,
-        status: 'blocked',
-        detail: `not attempted: depends on ${blockers.join(', ')}, which did not stage`,
-      })
-      continue
+export function resolveConflict({ version, localIntegrity, publishedIntegrity }) {
+  const ours = localIntegrity ?? 'unknown (npm pack failed)'
+  if (publishedIntegrity === undefined) {
+    return {
+      status: 'skipped',
+      detail: `${version} is already staged (npm 409). Before approving it on npmjs.com, check its integrity is ${ours}`,
     }
-    /** @type {StageOutcome} */
-    let outcome
-    try {
-      outcome = stageOne(target)
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      outcome = { status: 'failed', detail, code: 1 }
-    }
-    if (outcome.status === 'failed') broken.add(name)
-    results.push({ name, version, dir, status: outcome.status, detail: outcome.detail })
   }
-  return results
+  if (localIntegrity === undefined) {
+    return {
+      status: 'failed',
+      detail: `${version} is already published (npm 409) and this build's integrity could not be computed to verify it`,
+      code: 1,
+    }
+  }
+  if (publishedIntegrity !== localIntegrity) {
+    return {
+      status: 'failed',
+      detail: `${version} is already published (npm 409) with integrity ${publishedIntegrity}, but this build is ${localIntegrity}. Investigate before releasing again`,
+      code: 1,
+    }
+  }
+  return { status: 'skipped', detail: `${version} is already published with this exact tarball` }
+}
+
+/** @typedef {{ name: string, version: string }} ReleaseTarget */
+
+/**
+ * The package to stage, or `undefined` when the root is private. Pure. Exported for tests.
+ * Throws when the repo declares workspaces (npm `workspaces` or a pnpm `packages:` list): v2 has
+ * one package per repo, and staging only the root of a multi-package repo would be a silent
+ * partial release.
+ * @param {Record<string, unknown>} root parsed root package.json
+ * @param {{ hasWorkspaces: boolean }} layout
+ * @returns {ReleaseTarget | undefined}
+ */
+export function releaseTarget(root, { hasWorkspaces }) {
+  if (hasWorkspaces) {
+    throw new Error(
+      'this repo declares workspaces; Strutvane repos publish exactly one package from the root ' +
+        '(hub docs/18 §3.2), and multi-package publishing was retired with workspace-packages.mjs',
+    )
+  }
+  if (root['private']) return undefined
+  const name = root['name']
+  const version = root['version']
+  if (typeof name !== 'string' || name === '') throw new Error('package.json needs a "name"')
+  if (typeof version !== 'string' || version === '') {
+    throw new Error('package.json needs a "version"')
+  }
+  return { name, version }
 }
 
 /**
- * True if any result means the run must exit non-zero. Exported for tests.
- * @param {readonly StageResult[]} results
+ * True if the repo at `root` declares workspaces: a `workspaces` field in package.json, or a
+ * `packages:` key in a leftover pnpm-workspace.yaml. Exported for tests.
+ * @param {string} root
+ * @param {Record<string, unknown>} manifest parsed root package.json
  */
-export function hasFailures(results) {
-  return results.some((r) => r.status === 'failed' || r.status === 'blocked')
+export function declaresWorkspaces(root, manifest) {
+  if (manifest['workspaces'] !== undefined) return true
+  const pnpm = join(root, 'pnpm-workspace.yaml')
+  return existsSync(pnpm) && /^packages\s*:/m.test(readFileSync(pnpm, 'utf8'))
 }
 
 /**
- * A per-package summary, one line each. Exported for tests.
- * @param {readonly StageResult[]} results
- * @returns {string}
+ * Read a JSON object file, with the file path in any error.
+ * @param {string} file
+ * @returns {Record<string, unknown>}
  */
-export function formatSummary(results) {
-  const lines = results.map(
-    (r) => `  ${r.status.padEnd(7)} ${r.name}@${r.version} (${r.dir}): ${r.detail}`,
-  )
-  const failed = results.filter((r) => r.status === 'failed' || r.status === 'blocked').length
-  return `Summary: ${results.length} package(s), ${failed} failed\n${lines.join('\n')}\n`
+function readJsonObject(file) {
+  let value
+  try {
+    value = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (error) {
+    throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${file}: must contain a JSON object`)
+  }
+  return value
 }
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 /**
- * Run npm in `cwd`. The package folder is the working directory so npm reads that package's
- * package.json (name, version, files, publishConfig) and packs only that folder.
+ * Run npm in `cwd` and capture its output.
  * @param {string[]} args
  * @param {string} cwd
- * @param {boolean} [inherit] stream output to the console instead of capturing it
  */
-function runNpm(args, cwd, inherit = false) {
-  return spawnSync(npm, args, {
-    cwd,
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    ...(inherit ? { stdio: 'inherit' } : {}),
-  })
+function runNpm(args, cwd) {
+  return spawnSync(npm, args, { cwd, encoding: 'utf8', shell: process.platform === 'win32' })
 }
 
 /**
  * Versions of `name` already staged. If the list can't be read (e.g. the registry needs a login
- * for it), return `[]` with a warning: staging then either succeeds or fails loudly, and never
- * makes anything live, because approval on npmjs.com is still required.
+ * for it), return `[]` with a warning: staging then either succeeds, hits a 409 (handled), or
+ * fails loudly, and never makes anything live, because approval on npmjs.com is still required.
  */
 function stagedState(/** @type {string} */ name, /** @type {string} */ cwd) {
   const r = runNpm(['stage', 'list', name, '--json'], cwd)
@@ -262,61 +260,85 @@ function registryState(/** @type {string} */ name, /** @type {string} */ cwd) {
 }
 
 /**
- * Stage one package from its own folder, unless it is already published or staged.
+ * Parse a JSON string value printed by `npm view … --json` / `npm pack --json`, tolerating
+ * empty output. Returns the first string found.
+ * @param {string} text
+ * @param {(data: unknown) => unknown} pick
+ * @returns {string | undefined}
+ */
+function jsonString(text, pick) {
+  try {
+    const value = pick(JSON.parse(text))
+    return typeof value === 'string' && value !== '' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Integrity (sha512) of the tarball this build would publish. Scripts never run here. */
+function localIntegrity(/** @type {string} */ cwd) {
+  const r = runNpm(['pack', '--dry-run', '--json', '--ignore-scripts'], cwd)
+  if (r.status !== 0) return undefined
+  return jsonString(r.stdout ?? '', (d) =>
+    Array.isArray(d) && d[0] && typeof d[0] === 'object' ? d[0].integrity : undefined,
+  )
+}
+
+/** Integrity of the published `name@version`, or undefined if that version is not published. */
+function publishedIntegrity(/** @type {ReleaseTarget} */ { name, version }, cwd = '.') {
+  const r = runNpm(['view', `${name}@${version}`, 'dist.integrity', '--json'], cwd)
+  if (r.status !== 0) return undefined
+  return jsonString(r.stdout ?? '', (d) => d)
+}
+
+/**
+ * Stage the package unless it is already published or staged; a 409 goes through
+ * resolveConflict.
  * @param {ReleaseTarget} target
- * @param {string} repoRoot
+ * @param {string} cwd
  * @returns {StageOutcome}
  */
-function stageOne({ name, version, dir }, repoRoot) {
-  const cwd = resolve(repoRoot, dir)
+function stageOne(target, cwd) {
+  const { name, version } = target
   const decision = decide({
     version,
     ...registryState(name, cwd),
     staged: stagedState(name, cwd),
   })
-  if (decision.action === 'skip') {
-    process.stdout.write(`skip: ${decision.reason}\n`)
-    return { status: 'skipped', detail: decision.reason }
-  }
+  if (decision.action === 'skip') return { status: 'skipped', detail: decision.reason }
   process.stdout.write(`staging ${name}@${version} with tag "${decision.tag}"\n`)
   const r = runNpm(
     ['stage', 'publish', '--access', 'public', '--provenance', '--tag', decision.tag],
     cwd,
-    true,
   )
-  if (r.status !== 0) {
-    const code = r.status ?? 1
-    return { status: 'failed', detail: `npm stage publish exited with code ${code}`, code }
+  process.stdout.write(r.stdout ?? '')
+  process.stderr.write(r.stderr ?? '')
+  if (r.status === 0) {
+    return { status: 'staged', detail: 'staged. Approve it on npmjs.com to make it live.' }
   }
-  process.stdout.write('staged. Approve it on npmjs.com to make it live.\n')
-  return { status: 'staged', detail: `staged with tag "${decision.tag}", approve it on npmjs.com` }
+  if (isPublishConflict(`${r.stdout ?? ''}\n${r.stderr ?? ''}`)) {
+    return resolveConflict({
+      version,
+      localIntegrity: localIntegrity(cwd),
+      publishedIntegrity: publishedIntegrity(target, cwd),
+    })
+  }
+  const code = r.status ?? 1
+  return { status: 'failed', detail: `npm stage publish exited with code ${code}`, code }
 }
 
 function main() {
   const repoRoot = process.cwd()
   const root = readJsonObject(join(repoRoot, 'package.json'))
-  if (!root['private']) {
-    // One package from the repo root: the same flow, output and exit code as before workspaces.
-    for (const target of releaseTargets(root, [])) {
-      const outcome = stageOne(target, repoRoot)
-      if (outcome.status === 'failed') process.exitCode = outcome.code
-    }
-    return
-  }
-  const targets = releaseTargets(root, listWorkspacePackages(repoRoot))
-  if (targets.length === 0) {
+  const target = releaseTarget(root, { hasWorkspaces: declaresWorkspaces(repoRoot, root) })
+  if (!target) {
     process.stdout.write(`${String(root['name'])} is private, nothing to publish.\n`)
     return
   }
-  process.stdout.write(
-    `${String(root['name'])} is a private workspace root. Staging ${targets.length} package(s) in dependency order: ${targets.map((t) => t.name).join(', ')}\n`,
-  )
-  const results = stageAll(targets, (target) => {
-    process.stdout.write(`\n== ${target.name} (${target.dir})\n`)
-    return stageOne(target, repoRoot)
-  })
-  process.stdout.write(`\n${formatSummary(results)}`)
-  if (hasFailures(results)) process.exitCode = 1
+  const outcome = stageOne(target, repoRoot)
+  const label = outcome.status === 'skipped' ? 'skip' : outcome.status
+  process.stdout.write(`${label}: ${target.name}@${target.version}: ${outcome.detail}\n`)
+  if (outcome.status === 'failed') process.exitCode = outcome.code
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

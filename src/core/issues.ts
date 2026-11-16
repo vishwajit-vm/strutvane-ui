@@ -8,7 +8,7 @@
  *
  * @module
  */
-import type { ValidationIssue } from '@strutvane/contracts'
+import type { ValidationIssue } from '@strutvane/framework/contracts'
 
 /** `['lines', 1, 'amount']` → `'lines[1].amount'`; `[]` → `''` (form level). */
 export function issuePathToFieldName(path: readonly (string | number)[]): string {

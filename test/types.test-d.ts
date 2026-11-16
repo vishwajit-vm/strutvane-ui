@@ -1,5 +1,5 @@
 // Type-level tests: the public API accepts correct use and rejects misuse at compile time.
-import type { FieldDescriptor, ListQuery, ResourceManifest } from '@strutvane/contracts'
+import type { FieldDescriptor, ListQuery, ResourceManifest } from '@strutvane/framework/contracts'
 import { describe, expectTypeOf, test } from 'vitest'
 import {
   type ApiRecord,

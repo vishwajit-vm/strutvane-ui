@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Smaller React pieces: provider, widgets, cells, FieldShell, FilterBar helpers, useListQuery.
-import type { FieldDescriptor } from '@strutvane/contracts'
+import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, renderHook, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'

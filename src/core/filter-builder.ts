@@ -26,7 +26,7 @@ import {
   type FieldDescriptor,
   type FilterOperator,
   type QueryFilter,
-} from '@strutvane/contracts'
+} from '@strutvane/framework/contracts'
 import { isIsoDate, NUMERIC_TYPES, TEMPORAL_TYPES } from './validation.ts'
 
 /** A scalar filter value. */

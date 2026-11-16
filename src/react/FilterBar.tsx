@@ -7,7 +7,11 @@
  *
  * @module
  */
-import type { FieldDescriptor, FilterOperator, ResourceDescriptor } from '@strutvane/contracts'
+import type {
+  FieldDescriptor,
+  FilterOperator,
+  ResourceDescriptor,
+} from '@strutvane/framework/contracts'
 import { type FormEvent, type ReactElement, useId, useState } from 'react'
 import { buildFilter, type SimpleFilter } from '../core/filter-builder.ts'
 import type { MessageParams } from '../core/messages.ts'

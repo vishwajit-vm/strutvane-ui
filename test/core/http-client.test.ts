@@ -1,6 +1,6 @@
 // The fetch wrapper: routes, query vs POST /query, idempotency keys, problem mapping, malformed
 // responses and path safety. `fetch` is stubbed; requests are asserted as the server would see them.
-import type { ListQuery } from '@strutvane/contracts'
+import type { ListQuery } from '@strutvane/framework/contracts'
 import { describe, expect, test, vi } from 'vitest'
 import { createHttpClient } from '../../src/core/http-client.ts'
 import { ApiProblemError } from '../../src/core/problems.ts'

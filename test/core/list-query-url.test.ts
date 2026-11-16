@@ -1,6 +1,6 @@
 // List state ⇄ URL (ADR-0011 wire format) and ListQuery → wire. Includes the spike 08 acceptance
 // tests, adapted to repeated keys, and a property test over hostile values.
-import type { ListQuery } from '@strutvane/contracts'
+import type { ListQuery } from '@strutvane/framework/contracts'
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
 import type { SimpleFilter } from '../../src/core/filter-builder.ts'

@@ -2,7 +2,7 @@
 // Render cost for 500 rows: full render vs virtualized. jsdom has no layout or paint, so absolute
 // numbers are a proxy (DOM work + React reconciliation), useful for comparing the two strategies and
 // catching regressions, not a browser frame-time guarantee (that needs Playwright).
-import type { ListResult } from '@strutvane/contracts'
+import type { ListResult } from '@strutvane/framework/contracts'
 import { screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { ApiRecord, ResourceApi } from '../src/core/types.ts'

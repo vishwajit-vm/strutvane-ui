@@ -6,7 +6,7 @@
  *
  * @module
  */
-import type { ResourceDescriptor, ResourceManifest } from '@strutvane/contracts'
+import type { ResourceDescriptor, ResourceManifest } from '@strutvane/framework/contracts'
 import { type Context, createContext, useContext } from 'react'
 import { formatMessage, type MessageParams } from '../core/messages.ts'
 import type { ResourceApi } from '../core/types.ts'

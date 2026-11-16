@@ -2,7 +2,7 @@
 // JSON fields (`type: "json"`, what the framework emits for `field.json()`): the value is JSON, not
 // text. A plain text input would send the typed text as a JSON *string*, which the server accepts
 // (any JSON is valid), silently replacing an object with a string. These tests pin the round trip.
-import type { ResourceManifest } from '@strutvane/contracts'
+import type { ResourceManifest } from '@strutvane/framework/contracts'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'

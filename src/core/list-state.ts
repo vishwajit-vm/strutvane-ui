@@ -8,7 +8,11 @@
  *
  * @module
  */
-import { LIST_QUERY_LIMITS, type ListQuery, type SortDirective } from '@strutvane/contracts'
+import {
+  LIST_QUERY_LIMITS,
+  type ListQuery,
+  type SortDirective,
+} from '@strutvane/framework/contracts'
 import { filtersToQueryFilter, type SimpleFilter } from './filter-builder.ts'
 
 /** What the list page shows. */

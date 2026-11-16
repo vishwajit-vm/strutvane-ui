@@ -3,6 +3,7 @@
 # OpenSSF Scorecard: weekly supply-chain security check (pinned actions, token permissions, branch
 # protection, dependency updates, SAST, …). Results appear under Security → Code scanning and as a
 # public score users can check. Part of the continuous VAPT program (docs/13-testing-strategy.md §14).
+# Actions are pinned to full commit SHAs (tag in the trailing comment; SHAs checked 2026-11-15).
 name: Scorecard
 
 on:
