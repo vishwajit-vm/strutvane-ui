@@ -11,6 +11,7 @@
  */
 import type { Actor } from '@strutvane/framework/contracts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
+import { type XsrfOptions, xsrfHeaders } from './xsrf.ts'
 
 /** The signed-in actor as the API reports it (`GET /auth/me`). */
 export type SessionActor = Pick<Actor, 'id' | 'type' | 'roles'> & { readonly tenantId?: string }
@@ -29,6 +30,13 @@ export interface SessionClientOptions {
   readonly apiUrl: string
   readonly fetch?: typeof globalThis.fetch
   readonly credentials?: RequestCredentials
+  /**
+   * Extra headers for every auth request, static or computed per request (an app-wide header such
+   * as a tenant hint). They can't override `accept`, `content-type` or the CSRF header.
+   */
+  readonly headers?: Readonly<Record<string, string>> | (() => Readonly<Record<string, string>>)
+  /** The CSRF header on sign-in, sign-out and switches (decision #17). `false` turns it off. */
+  readonly xsrf?: XsrfOptions | false
 }
 
 /** What {@link createSessionClient} returns. */
@@ -82,7 +90,9 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
         method,
         credentials,
         headers: {
+          ...(typeof options.headers === 'function' ? options.headers() : options.headers),
           accept: 'application/json, application/problem+json',
+          ...xsrfHeaders(method, options.xsrf),
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

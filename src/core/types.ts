@@ -42,4 +42,9 @@ export interface ResourceApi {
     options?: MutationOptions,
   ): Promise<ApiRecord>
   delete(path: string, id: string, options?: MutationOptions): Promise<void>
+  /**
+   * Undo a soft delete (`POST {path}/{id}/restore`, decision #56). Optional: without it the UI
+   * offers no Undo, and deleted records stay reachable through the server's own restore flow.
+   */
+  restore?(path: string, id: string, options?: MutationOptions): Promise<ApiRecord | undefined>
 }

@@ -2,15 +2,16 @@
  * Default form widgets, one per field type (docs/08 §3.1).
  *
  * Each widget renders ONLY its control; {@link FieldShell} renders the label, help and error once
- * for every widget (including overrides). Native elements are used on purpose: they are accessible
- * by default and keep the package free of a component library. Apps restyle or replace any of them
- * through the registry.
+ * for every widget (including overrides). Controls are native elements drawn by the design's skins
+ * (`Input`, `Select`, `Textarea`, `Checkbox`), so they stay accessible by default and look like the
+ * design in use. Apps replace any widget through the registry.
  *
  * @module
  */
 import { type ChangeEvent, useId, useState } from 'react'
 import { INTEGER_TYPES, InvalidJsonText } from '../core/validation.ts'
 import { useStrutvane } from './context.ts'
+import { useSkins } from './design-hooks.ts'
 import { relationId, useDebouncedValue, useRelationLabel, useRelationOptions } from './relations.ts'
 import type { Widget, WidgetProps } from './types.ts'
 
@@ -37,30 +38,36 @@ const INPUT_TYPES: Readonly<Record<string, string>> = {
 }
 
 /** Single-line text (string, slug, email, url, phone…). Empty input becomes `null`. */
-export const TextWidget: Widget = (p) => (
-  <input
-    {...common(p)}
-    type={INPUT_TYPES[p.field.type] ?? 'text'}
-    value={asString(p.value)}
-    readOnly={p.readOnly}
-    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-      p.onChange(e.target.value === '' ? null : e.target.value)
-    }
-  />
-)
+export const TextWidget: Widget = (p) => {
+  const { Input } = useSkins()
+  return (
+    <Input
+      {...common(p)}
+      type={INPUT_TYPES[p.field.type] ?? 'text'}
+      value={asString(p.value)}
+      readOnly={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+        p.onChange(e.target.value === '' ? null : e.target.value)
+      }
+    />
+  )
+}
 
 /** Multi-line text. */
-export const TextareaWidget: Widget = (p) => (
-  <textarea
-    {...common(p)}
-    value={asString(p.value)}
-    readOnly={p.readOnly}
-    rows={3}
-    onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-      p.onChange(e.target.value === '' ? null : e.target.value)
-    }
-  />
-)
+export const TextareaWidget: Widget = (p) => {
+  const { Textarea } = useSkins()
+  return (
+    <Textarea
+      {...common(p)}
+      value={asString(p.value)}
+      readOnly={p.readOnly}
+      rows={3}
+      onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+        p.onChange(e.target.value === '' ? null : e.target.value)
+      }
+    />
+  )
+}
 
 /** The locale's decimal separator (`.` in `en`, `,` in `de`). */
 function decimalSeparator(locale: string): string {
@@ -114,6 +121,7 @@ export function numericText(raw: string, locale = 'en'): string {
  */
 export const NumberWidget: Widget = (p) => {
   const { locale } = useStrutvane()
+  const { Input } = useSkins()
   // Decimals and big integers travel as strings (the field's schema says `type: "string"`) so no
   // precision is lost: send those as canonical text, everything else as a number.
   const asText = p.field.schema?.['type'] === 'string'
@@ -129,7 +137,7 @@ export const NumberWidget: Widget = (p) => {
     if (!Object.is(toValue(draft), p.value)) setDraft(asString(p.value))
   }
   return (
-    <input
+    <Input
       {...common(p)}
       type="text"
       inputMode={INTEGER_TYPES.has(p.field.type) ? 'numeric' : 'decimal'}
@@ -160,6 +168,7 @@ const jsonText = (v: unknown): string =>
  * while typing and only resyncs when the value changes from outside.
  */
 export const JsonWidget: Widget = (p) => {
+  const { Textarea } = useSkins()
   const [draft, setDraft] = useState(() =>
     p.value instanceof InvalidJsonText ? p.value.text : jsonText(p.value),
   )
@@ -178,7 +187,7 @@ export const JsonWidget: Widget = (p) => {
       setDraft(jsonText(p.value))
   }
   return (
-    <textarea
+    <Textarea
       {...common(p)}
       value={draft}
       readOnly={p.readOnly}
@@ -201,8 +210,9 @@ const sameJson = (a: unknown, b: unknown): boolean =>
 /** Enum: a native select with an empty choice. */
 export const SelectWidget: Widget = (p) => {
   const { t } = useStrutvane()
+  const { Select } = useSkins()
   return (
-    <select
+    <Select
       {...common(p)}
       value={asString(p.value)}
       disabled={p.readOnly}
@@ -216,33 +226,38 @@ export const SelectWidget: Widget = (p) => {
           {v}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 
 /** Boolean: a checkbox. */
-export const CheckboxWidget: Widget = (p) => (
-  <input
-    {...common(p)}
-    type="checkbox"
-    checked={p.value === true}
-    disabled={p.readOnly}
-    onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(e.target.checked)}
-  />
-)
+export const CheckboxWidget: Widget = (p) => {
+  const { Checkbox } = useSkins()
+  return (
+    <Checkbox
+      {...common(p)}
+      checked={p.value === true}
+      disabled={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(e.target.checked)}
+    />
+  )
+}
 
 /** Date (`YYYY-MM-DD`): the native date input. */
-export const DateWidget: Widget = (p) => (
-  <input
-    {...common(p)}
-    type="date"
-    value={asString(p.value)}
-    readOnly={p.readOnly}
-    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-      p.onChange(e.target.value === '' ? null : e.target.value)
-    }
-  />
-)
+export const DateWidget: Widget = (p) => {
+  const { Input } = useSkins()
+  return (
+    <Input
+      {...common(p)}
+      type="date"
+      value={asString(p.value)}
+      readOnly={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+        p.onChange(e.target.value === '' ? null : e.target.value)
+      }
+    />
+  )
+}
 
 const pad = (n: number, width = 2) => String(n).padStart(width, '0')
 
@@ -268,21 +283,25 @@ export function fromLocalInput(raw: string): string | null {
  * ISO-8601 instant in UTC (`2026-11-14T08:30:00.000Z`), the format the API requires. Without the
  * conversion the input would show (and send back) the server's UTC wall clock as if it were local.
  */
-export const DateTimeWidget: Widget = (p) => (
-  <input
-    {...common(p)}
-    type="datetime-local"
-    step={1}
-    value={toLocalInput(p.value)}
-    readOnly={p.readOnly}
-    onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(fromLocalInput(e.target.value))}
-  />
-)
+export const DateTimeWidget: Widget = (p) => {
+  const { Input } = useSkins()
+  return (
+    <Input
+      {...common(p)}
+      type="datetime-local"
+      step={1}
+      value={toLocalInput(p.value)}
+      readOnly={p.readOnly}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => p.onChange(fromLocalInput(e.target.value))}
+    />
+  )
+}
 
 /** Read-only display of any value (computed fields, or any field an app wants shown, not edited). */
-export const ReadOnlyWidget: Widget = (p) => (
-  <input {...common(p)} type="text" value={asString(p.value)} readOnly onChange={() => {}} />
-)
+export const ReadOnlyWidget: Widget = (p) => {
+  const { Input } = useSkins()
+  return <Input {...common(p)} type="text" value={asString(p.value)} readOnly onChange={() => {}} />
+}
 
 /**
  * belongsTo: a searchable, paginated picker.
@@ -294,6 +313,7 @@ export const ReadOnlyWidget: Widget = (p) => (
  */
 export const RelationPickerWidget: Widget = (p) => {
   const { t } = useStrutvane()
+  const { Input, Select, Button } = useSkins()
   const searchId = useId()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 250)
@@ -308,7 +328,7 @@ export const RelationPickerWidget: Widget = (p) => {
   return (
     <div>
       {relation.searchable && !p.readOnly && (
-        <input
+        <Input
           id={searchId}
           type="search"
           aria-label={t('ui.form.searchRelation', { resource: targetLabel })}
@@ -317,7 +337,7 @@ export const RelationPickerWidget: Widget = (p) => {
           onChange={(e) => setSearch(e.target.value)}
         />
       )}
-      <select
+      <Select
         {...common(p)}
         value={selectedId ?? ''}
         disabled={p.readOnly}
@@ -334,11 +354,11 @@ export const RelationPickerWidget: Widget = (p) => {
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
       {relation.hasMore && !p.readOnly && (
-        <button type="button" onClick={relation.loadMore} disabled={relation.isLoadingMore}>
+        <Button size="sm" onClick={relation.loadMore} disabled={relation.isLoadingMore}>
           {relation.isLoadingMore ? t('ui.form.relationLoading') : t('ui.form.loadMore')}
-        </button>
+        </Button>
       )}
     </div>
   )

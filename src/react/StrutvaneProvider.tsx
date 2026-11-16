@@ -32,6 +32,8 @@ export interface StrutvaneProviderProps {
   readonly locale?: string
   /** Create a `QueryClientProvider` with this client (omit if your app already has one). */
   readonly queryClient?: QueryClient
+  /** Called when a request answers 401; the app shell shows "sign in again" (drafts are kept). */
+  readonly onUnauthenticated?: () => void
   readonly children?: ReactNode
 }
 
@@ -43,12 +45,13 @@ export function StrutvaneProvider({
   base = defaultRegistry,
   locale = 'en',
   queryClient,
+  onUnauthenticated,
   children,
 }: StrutvaneProviderProps): ReactElement {
   const registry = useMemo(() => mergeRegistry(base, overrides), [base, overrides])
   const value = useMemo(
-    () => createContextValue(api, manifest, registry, locale),
-    [api, manifest, registry, locale],
+    () => createContextValue(api, manifest, registry, locale, onUnauthenticated),
+    [api, manifest, registry, locale, onUnauthenticated],
   )
   const tree = <StrutvaneContext.Provider value={value}>{children}</StrutvaneContext.Provider>
   return queryClient ? <QueryClientProvider client={queryClient}>{tree}</QueryClientProvider> : tree

@@ -16,6 +16,7 @@ import { type FormEvent, type ReactElement, useId, useState } from 'react'
 import { buildFilter, type SimpleFilter } from '../core/filter-builder.ts'
 import type { MessageParams } from '../core/messages.ts'
 import { useStrutvane } from './context.ts'
+import { useSkins } from './design-hooks.ts'
 
 type Translate = (key: string, params?: MessageParams) => string
 
@@ -61,6 +62,8 @@ export interface FilterBarProps {
   readonly filters: readonly SimpleFilter[]
   readonly onAdd: (filter: SimpleFilter) => void
   readonly onRemove: (index: number) => void
+  /** Render the active-filter chips here (default). The list page renders its own, with search. */
+  readonly showChips?: boolean
 }
 
 /** Filter chips for one resource. Renders nothing when no field is filterable. */
@@ -69,8 +72,10 @@ export function FilterBar({
   filters,
   onAdd,
   onRemove,
+  showChips = true,
 }: FilterBarProps): ReactElement | null {
   const { t } = useStrutvane()
+  const { Select, Input, Button, Chip } = useSkins()
   const filterable = resource.fields.filter((f) => f.filterOperators.length > 0)
   const ids = useId()
   const [fieldName, setFieldName] = useState(filterable[0]?.name ?? '')
@@ -103,14 +108,14 @@ export function FilterBar({
     .join(' ')
 
   return (
-    <div>
+    <div data-sv-part="filters">
       <form
         aria-label={t('ui.filter.form', { resource: resource.pluralLabel })}
         onSubmit={submit}
         noValidate
       >
         <label htmlFor={`${ids}-field`}>{t('ui.filter.field')}</label>
-        <select
+        <Select
           id={`${ids}-field`}
           value={fieldName}
           onChange={(e) => {
@@ -125,9 +130,9 @@ export function FilterBar({
               {f.label}
             </option>
           ))}
-        </select>
+        </Select>
         <label htmlFor={`${ids}-op`}>{t('ui.filter.operator')}</label>
-        <select
+        <Select
           id={`${ids}-op`}
           value={op}
           onChange={(e) => {
@@ -140,13 +145,13 @@ export function FilterBar({
               {t(`ui.op.${o}`)}
             </option>
           ))}
-        </select>
+        </Select>
         {needsValue && (
           <>
             <label htmlFor={`${ids}-value`}>
               {op === 'between' ? t('ui.filter.from') : t('ui.filter.value')}
             </label>
-            <input
+            <Input
               id={`${ids}-value`}
               value={value}
               aria-invalid={error ? true : undefined}
@@ -159,7 +164,7 @@ export function FilterBar({
         {op === 'between' && (
           <>
             <label htmlFor={`${ids}-to`}>{t('ui.filter.to')}</label>
-            <input
+            <Input
               id={`${ids}-to`}
               value={valueTo}
               aria-invalid={error ? true : undefined}
@@ -168,14 +173,14 @@ export function FilterBar({
             />
           </>
         )}
-        <button type="submit">{t('ui.filter.add')}</button>
+        <Button type="submit">{t('ui.filter.add')}</Button>
         {error && (
           <p id={`${ids}-error`} role="alert">
             {error}
           </p>
         )}
       </form>
-      {filters.length > 0 && (
+      {showChips && filters.length > 0 && (
         <ul aria-label={t('ui.filter.active')}>
           {filters.map((f, i) => {
             const text = describeFilter(
@@ -185,14 +190,20 @@ export function FilterBar({
             )
             return (
               <li key={`${f.field}-${f.op}`}>
-                {text}{' '}
-                <button
-                  type="button"
-                  aria-label={t('ui.filter.remove', { filter: text })}
-                  onClick={() => onRemove(i)}
+                <Chip
+                  remove={
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={t('ui.filter.remove', { filter: text })}
+                      onClick={() => onRemove(i)}
+                    >
+                      ×
+                    </Button>
+                  }
                 >
-                  ×
-                </button>
+                  {text}
+                </Chip>
               </li>
             )
           })}

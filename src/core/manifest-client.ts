@@ -28,6 +28,7 @@ import {
 } from '@strutvane/framework/contracts'
 import { FIELD_NAME_PATTERN, isFilterOperator } from './filter-builder.ts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
+import { withUiExtensions } from './resource-extensions.ts'
 
 /** Result of {@link parseManifest}. */
 export type ManifestParseResult =
@@ -223,7 +224,7 @@ function parseResource(c: Checker, raw: unknown, at: string): ResourceDescriptor
       ...(cols ? { listColumns: cols } : {}),
     }
   }
-  return {
+  const descriptor: ResourceDescriptor = {
     name: c.str(raw, 'name', at),
     path: cleanPath,
     label: c.str(raw, 'label', at),
@@ -239,6 +240,7 @@ function parseResource(c: Checker, raw: unknown, at: string): ResourceDescriptor
     audited: c.bool(raw, 'audited', at),
     ...(ui ? { ui } : {}),
   }
+  return withUiExtensions(descriptor, raw)
 }
 
 /** Validate an untrusted value as a {@link ResourceManifest}. Never throws. */

@@ -1,19 +1,27 @@
 /**
- * `<ResourceList>`: the list page for one resource, built entirely from its descriptor.
+ * `<ResourceList>`: the list page for one resource, built entirely from its descriptor and drawn
+ * through the design's slots.
  *
  * Columns (`ui.listColumns`, else sensible defaults) feed TanStack Table v9, which supplies ONLY the
- * header/cell model and the sort state. Filtering, search, sorting and cursor pagination all run on
- * the server (`manualSorting`, ADR-0014) through `useListQuery` → `ListQuery` → `api.list`.
+ * header/cell model and the sort state. Filtering, search, sorting and pagination all run on the
+ * server (`manualSorting`, ADR-0014) through `useListQuery` → `ListQuery` → `api.list`.
  *
+ * - **Pages:** numbered, 25 rows by default (choices 10/25/50/100, never above the resource's
+ *   `maxPerPage`), with "Showing 26–50 of 312 posts". The page, size, sort, search and filters
+ *   live in the URL, so Back, reloads and shared links restore the exact view.
  * - **Sorting:** the first click is always ascending (`sortDescFirst: false`); TanStack otherwise
  *   starts numeric columns descending (spike 08 defect).
- * - **Capabilities:** New / Edit / Delete appear only when the manifest allows them for this actor
- *   (the API still enforces every rule).
+ * - **Filter chips:** the search text and every filter show as removable chips, plus Clear all.
+ * - **Preferences:** a Columns menu (the title column always stays) and a compact-rows toggle,
+ *   remembered per viewer and resource; storage failures just mean "not remembered".
+ * - **Delete:** the shared flow (confirm, type-to-confirm for permanent deletes, Undo).
+ * - **Capabilities:** New / Edit / Delete appear only when the manifest allows them (the API still
+ *   enforces every rule).
  * - **Accessibility:** a real `<table>` with caption, `scope="col"`, sortable headers as buttons with
  *   `aria-sort`, a labelled pagination nav, and a polite live region announcing result counts.
  * - **Performance:** above `virtualizeThreshold` rows only the visible window is rendered, with
- *   spacer rows and `aria-rowcount` / `aria-rowindex`. A container that cannot be measured still
- *   shows the first rows (fail-safe window, spike 08 defect: never an empty table when data exists).
+ *   spacer rows and `aria-rowcount` / `aria-rowindex`; a container that cannot be measured still
+ *   shows the first rows (fail-safe window, spike 08 defect).
  *
  * @module
  */
@@ -22,7 +30,7 @@ import type {
   ResourceDescriptor,
   SortDirective,
 } from '@strutvane/framework/contracts'
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   type ColumnDef,
   rowSortingFeature,
@@ -41,17 +49,22 @@ import {
   useRef,
   useState,
 } from 'react'
-import { createIdempotencyKey } from '../core/ids.ts'
 import { MAX_SEARCH_LENGTH } from '../core/list-query-url.ts'
+import { MAX_PAGE, pageSizeChoices, pageWindow } from '../core/list-state.ts'
 import { isApiProblemError, problemBannerText } from '../core/problems.ts'
 import { resolveCell } from '../core/registry.ts'
+import { maxPerPage } from '../core/resource-extensions.ts'
 import type { ApiRecord } from '../core/types.ts'
 import { COLLECTION_RELATION_TYPES } from '../core/validation.ts'
+import { loadViewPrefs, saveViewPrefs, type ViewPrefs } from '../core/view-prefs.ts'
 import { CellFallback } from './cells.tsx'
 import { useStrutvane } from './context.ts'
-import { FilterBar } from './FilterBar.tsx'
+import { useIllustrations, useSkins } from './design-hooks.ts'
+import { describeFilter, FilterBar } from './FilterBar.tsx'
+import { type Crumb, PageHeading } from './PageHeading.tsx'
 import { RenderBoundary } from './RenderBoundary.tsx'
 import { recordTitle, useDebouncedValue } from './relations.ts'
+import { useDeleteRecord } from './useDeleteRecord.tsx'
 import { useListQuery } from './useListQuery.ts'
 
 const features = tableFeatures({ rowSortingFeature })
@@ -73,6 +86,8 @@ export const ROW_HEIGHT = 40
 const FALLBACK_VIEWPORT = 600
 const OVERSCAN = 10
 const SEARCH_DEBOUNCE_MS = 300
+/** Totals at or above this are the server's cap ("more than 10,000", blueprint §5). */
+export const TOTAL_CAP = 10_000
 
 /** Columns shown for a resource: explicit `ui.listColumns`, else up to 6 simple fields. */
 export function listFields(resource: ResourceDescriptor): FieldDescriptor[] {
@@ -113,23 +128,28 @@ export interface ResourceListProps {
   readonly onSearchStringChange?: (search: string) => void
   /** Shows "New …" (when the actor may create). */
   readonly onCreate?: () => void
-  /** Shows a View button per row that opens the record (when the actor may view). */
+  /** Shows an Open button per row (when the actor may view). */
   readonly onView?: (record: ApiRecord) => void
   /** Shows an Edit button per row (when the actor may update). */
   readonly onEdit?: (record: ApiRecord) => void
-  /**
-   * Ask the user before deleting. A Delete button is shown per row only when this is provided AND
-   * the actor may delete. Return `true` to delete.
-   */
-  readonly confirmDelete?: (record: ApiRecord) => boolean | Promise<boolean>
+  /** Shows a Delete button per row (when the actor may delete). */
+  readonly deletable?: boolean
   /** Called after a record was deleted. */
   readonly onDeleted?: (record: ApiRecord) => void
   /** Render only visible rows above this many rows. Default 100. */
   readonly virtualizeThreshold?: number
-  /** Page size when the URL does not set one (clamped to the protocol maximum). */
+  /** Page size when the URL does not set one (clamped to the limits). Default 25. */
   readonly pageSize?: number
   /** Extra toolbar content (L2 slot: `<resource>.list.toolbar`). */
   readonly toolbar?: ReactNode
+  /** Breadcrumbs of the page heading (the app shell passes Home › Posts). */
+  readonly breadcrumbs?: readonly Crumb[]
+  /**
+   * Inside another page (a detail page's related list): no page heading, labelled by
+   * `embeddedLabel`, and no remembered preferences.
+   */
+  readonly embedded?: boolean
+  readonly embeddedLabel?: string
 }
 
 /** The list page for one resource. */
@@ -140,18 +160,24 @@ export function ResourceList({
   onCreate,
   onView,
   onEdit,
-  confirmDelete,
+  deletable = false,
   onDeleted,
   virtualizeThreshold = 100,
   pageSize,
   toolbar,
+  breadcrumbs,
+  embedded = false,
+  embeddedLabel,
 }: ResourceListProps): ReactElement {
-  const { api, registry, t, locale } = useStrutvane()
-  const queryClient = useQueryClient()
+  const { api, registry, t, locale, onUnauthenticated } = useStrutvane()
+  const { Button, Input, Select, Table, Skeleton, Alert, Chip } = useSkins()
+  const { Empty } = useIllustrations()
   const ids = useId()
+  const titleId = `${ids}-title`
   const list = useListQuery(resource, initialSearch, pageSize === undefined ? {} : { pageSize })
   const { setSort, setSearch } = list
   const resourceText = resource.pluralLabel.toLowerCase()
+  const removal = useDeleteRecord(resource, onDeleted)
 
   // Report only real state changes: an inline callback (a new function every render) must not
   // re-fire the effect, or a parent that re-renders on the callback (a router) would loop.
@@ -171,6 +197,19 @@ export function ResourceList({
     setSearchText(list.state.search)
   }
   useEffect(() => setSearch(debouncedSearch), [debouncedSearch, setSearch])
+  const clearAll = () => {
+    setSearchText('')
+    list.clearFilters()
+  }
+
+  // Per-viewer preferences: hidden columns and density (not for embedded lists).
+  const [prefs, setPrefs] = useState<ViewPrefs>(() =>
+    embedded ? { hidden: [], density: 'default' } : loadViewPrefs(resource.path),
+  )
+  const updatePrefs = (next: ViewPrefs) => {
+    setPrefs(next)
+    if (!embedded) saveViewPrefs(resource.path, next)
+  }
 
   const query = useQuery({
     queryKey: ['strutvane', 'list', resource.path, list.listQuery],
@@ -178,8 +217,24 @@ export function ResourceList({
     placeholderData: keepPreviousData,
     enabled: resource.capabilities.list,
   })
+  const unauthenticated = isApiProblemError(query.error) && query.error.problem.status === 401
+  useEffect(() => {
+    if (unauthenticated) onUnauthenticated?.()
+  }, [unauthenticated, onUnauthenticated])
 
-  const fields = useMemo(() => listFields(resource), [resource])
+  const allFields = useMemo(() => listFields(resource), [resource])
+  const titleField = resource.titleField
+  const hiddenKey = prefs.hidden.join('\u0000')
+  // Memoised on the hidden names' CONTENT: a new array every render would give the table new
+  // cell components and remount every cell (spike 14 finding 13, the third time this bit).
+  const hidden = useMemo(
+    () => new Set(hiddenKey === '' ? [] : hiddenKey.split('\u0000')),
+    [hiddenKey],
+  )
+  const fields = useMemo(
+    () => allFields.filter((f) => f.name === titleField || !hidden.has(f.name)),
+    [allFields, hidden, titleField],
+  )
   const columns = useMemo<ColumnDef<typeof features, ApiRecord>[]>(
     () =>
       fields.map((field) => {
@@ -242,71 +297,105 @@ export function ResourceList({
     ? Math.max(0, rows.length * ROW_HEIGHT - (windowItems.at(-1)?.end ?? 0))
     : 0
 
-  // Delete: one idempotency key per record until the delete succeeds, so a retry is safe.
-  const deleteKeys = useRef(new Map<string, string>())
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const handleDelete = async (record: ApiRecord) => {
-    if (!confirmDelete || !(await confirmDelete(record))) return
-    const key = deleteKeys.current.get(record.id) ?? createIdempotencyKey()
-    deleteKeys.current.set(record.id, key)
-    setDeleting(record.id)
-    setActionError(null)
-    try {
-      await api.delete(resource.path, record.id, { idempotencyKey: key })
-      deleteKeys.current.delete(record.id)
-      queryClient.removeQueries({ queryKey: ['strutvane', 'record', resource.path, record.id] })
-      await queryClient.invalidateQueries({ queryKey: ['strutvane', 'list', resource.path] })
-      onDeleted?.(record)
-    } catch (error) {
-      const title = recordTitle(resource, record)
-      setActionError(
-        isApiProblemError(error)
-          ? `${t('ui.list.deleteFailed', { title })} ${problemBannerText(error.problem, registry.messages, locale)}`
-          : t('ui.list.deleteFailed', { title }),
-      )
-    } finally {
-      setDeleting(null)
-    }
-  }
-
   const caps = resource.capabilities
   const canView = caps.view && onView !== undefined
   const canEdit = caps.update && onEdit !== undefined
-  const canDelete = caps.delete && confirmDelete !== undefined
+  const canDelete = caps.delete && deletable
   const hasActions = canView || canEdit || canDelete
   const hasSearch = resource.fields.some((f) => f.searchable)
   const colSpan = fields.length + (hasActions ? 1 : 0)
   const pageInfo = query.data?.meta.page
+  const page = list.state.page
+  const size = list.state.pageSize
+  const total = pageInfo?.total
+  const lastPage =
+    total === undefined ? undefined : Math.min(MAX_PAGE, Math.max(1, Math.ceil(total / size)))
+  const hasNext = lastPage === undefined ? pageInfo?.hasMore === true : page < lastPage
+  const from = rows.length === 0 ? 0 : (page - 1) * size + 1
+  const to = (page - 1) * size + rows.length
+  const filtersActive = list.state.filters.length > 0 || list.state.search !== ''
   const loadError = query.error
     ? isApiProblemError(query.error)
       ? problemBannerText(query.error.problem, registry.messages, locale)
       : t('ui.list.loadFailed')
     : null
 
-  return (
-    <section aria-labelledby={`${ids}-title`}>
-      <h2 id={`${ids}-title`}>{resource.pluralLabel}</h2>
+  const status = query.isLoading
+    ? t('ui.list.loading', { resource: resourceText })
+    : rows.length === 0
+      ? t('ui.list.showing', { count: 0, resource: resourceText })
+      : total === undefined
+        ? t('ui.list.showingRangeOpen', { from, to, resource: resourceText })
+        : total >= TOTAL_CAP
+          ? t('ui.list.showingRangeCapped', { from, to, total: TOTAL_CAP, resource: resourceText })
+          : t('ui.list.showingRange', { from, to, total, resource: resourceText })
 
-      <div>
+  const label = embedded ? (embeddedLabel ?? resource.pluralLabel) : resource.pluralLabel
+  const newButton =
+    caps.create && onCreate ? (
+      <Button variant="primary" icon="plus" data-sv-shortcut="new" onClick={onCreate}>
+        {t('ui.list.new', { resource: resource.label.toLowerCase() })}
+      </Button>
+    ) : null
+
+  return (
+    <section
+      {...(embedded ? { 'aria-label': label } : { 'aria-labelledby': titleId })}
+      data-sv-part="list"
+    >
+      {embedded ? null : (
+        <PageHeading
+          title={resource.pluralLabel}
+          titleId={titleId}
+          {...(breadcrumbs ? { breadcrumbs } : {})}
+          actions={newButton}
+        />
+      )}
+
+      <div data-sv-part="toolbar">
         {hasSearch && (
-          <>
+          <div>
             <label htmlFor={`${ids}-search`}>
               {t('ui.list.search', { resource: resource.pluralLabel })}
             </label>
-            <input
+            <Input
               id={`${ids}-search`}
               type="search"
               maxLength={MAX_SEARCH_LENGTH}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
-          </>
+          </div>
         )}
-        {caps.create && onCreate && (
-          <button type="button" onClick={onCreate}>
-            {t('ui.list.new', { resource: resource.label.toLowerCase() })}
-          </button>
+        {embedded ? newButton : null}
+        {embedded ? null : (
+          <ColumnsMenu
+            menuId={`${ids}-columns`}
+            fields={allFields}
+            titleField={titleField}
+            hidden={hidden}
+            onToggle={(name) =>
+              updatePrefs({
+                ...prefs,
+                hidden: hidden.has(name)
+                  ? prefs.hidden.filter((h) => h !== name)
+                  : [...prefs.hidden, name],
+              })
+            }
+          />
+        )}
+        {embedded ? null : (
+          <Button
+            aria-pressed={prefs.density === 'compact'}
+            onClick={() =>
+              updatePrefs({
+                ...prefs,
+                density: prefs.density === 'compact' ? 'default' : 'compact',
+              })
+            }
+          >
+            {t('ui.list.compact')}
+          </Button>
         )}
         {toolbar}
       </div>
@@ -316,26 +405,105 @@ export function ResourceList({
         filters={list.state.filters}
         onAdd={list.addFilter}
         onRemove={list.removeFilter}
+        showChips={false}
       />
 
-      {(loadError ?? actionError) && <p role="alert">{loadError ?? actionError}</p>}
+      {filtersActive && (
+        <div data-sv-part="chips">
+          <ul aria-label={t('ui.filter.active')} data-sv-part="chip-list">
+            {list.state.search !== '' && (
+              <li>
+                <Chip
+                  remove={
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={t('ui.list.removeSearch', { text: list.state.search })}
+                      onClick={() => {
+                        setSearchText('')
+                        setSearch('')
+                      }}
+                    >
+                      ×
+                    </Button>
+                  }
+                >
+                  {t('ui.list.searchChip', { text: list.state.search })}
+                </Chip>
+              </li>
+            )}
+            {list.state.filters.map((f, i) => {
+              const text = describeFilter(
+                f,
+                resource.fields.find((x) => x.name === f.field),
+                t,
+              )
+              return (
+                <li key={`${f.field}-${f.op}`}>
+                  <Chip
+                    remove={
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t('ui.filter.remove', { filter: text })}
+                        onClick={() => list.removeFilter(i)}
+                      >
+                        ×
+                      </Button>
+                    }
+                  >
+                    {text}
+                  </Chip>
+                </li>
+              )
+            })}
+          </ul>
+          <Button size="sm" variant="ghost" onClick={clearAll}>
+            {t('ui.list.clearAll')}
+          </Button>
+        </div>
+      )}
+
+      {(loadError ?? removal.error) && (
+        <Alert tone="danger" role="alert">
+          {loadError ?? removal.error}
+        </Alert>
+      )}
       <p role="status" aria-live="polite">
-        {query.isLoading
-          ? t('ui.list.loading', { resource: resourceText })
-          : t('ui.list.showing', { count: rows.length, resource: resourceText })}
+        {status}
       </p>
 
-      <div
-        ref={scrollRef}
-        style={virtualize ? { maxHeight: FALLBACK_VIEWPORT, overflowY: 'auto' } : undefined}
-        // A scrollable region must be reachable by keyboard (axe: scrollable-region-focusable).
-        {...(virtualize ? { tabIndex: 0, role: 'region', 'aria-label': resource.pluralLabel } : {})}
-      >
-        <table
-          aria-rowcount={virtualize ? rows.length + 1 : undefined}
-          aria-busy={query.isFetching || undefined}
+      {query.isLoading ? (
+        <div aria-busy="true">
+          <Skeleton lines={5} />
+        </div>
+      ) : !loadError && rows.length === 0 ? (
+        <div data-sv-part="empty">
+          <Empty />
+          <p>
+            {filtersActive
+              ? t('ui.list.empty', { resource: resourceText })
+              : t('ui.list.emptyNoFilters', { resource: resourceText })}
+          </p>
+          {filtersActive ? <Button onClick={clearAll}>{t('ui.list.clearAll')}</Button> : newButton}
+        </div>
+      ) : rows.length === 0 ? null : (
+        <Table
+          density={prefs.density}
+          regionProps={{
+            ref: scrollRef,
+            // A scrollable region must be reachable by keyboard (axe: scrollable-region-focusable).
+            tabIndex: 0,
+            role: 'region',
+            // Not the same name as the page's own region: landmarks must be told apart.
+            'aria-label': t('ui.list.tableRegion', { resource: label }),
+          }}
+          tableProps={{
+            'aria-rowcount': virtualize ? rows.length + 1 : undefined,
+            'aria-busy': query.isFetching || undefined,
+          }}
         >
-          <caption>{resource.pluralLabel}</caption>
+          <caption>{label}</caption>
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} aria-rowindex={virtualize ? 1 : undefined}>
@@ -397,32 +565,35 @@ export function ResourceList({
                   {hasActions && (
                     <td>
                       {canView && (
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           aria-label={t('ui.list.view', { title })}
                           onClick={() => onView?.(row.original)}
                         >
                           {t('ui.list.viewShort')}
-                        </button>
+                        </Button>
                       )}
                       {canEdit && (
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           aria-label={t('ui.list.edit', { title })}
                           onClick={() => onEdit?.(row.original)}
                         >
                           {t('ui.list.editShort')}
-                        </button>
+                        </Button>
                       )}
                       {canDelete && (
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           aria-label={t('ui.list.delete', { title })}
-                          disabled={deleting === row.id}
-                          onClick={() => void handleDelete(row.original)}
+                          disabled={removal.busyId === row.id}
+                          onClick={() => removal.request(row.original)}
                         >
                           {t('ui.list.deleteShort')}
-                        </button>
+                        </Button>
                       )}
                     </td>
                   )}
@@ -435,29 +606,109 @@ export function ResourceList({
                 <td colSpan={colSpan} style={{ height: padBottom, padding: 0 }} />
               </tr>
             )}
-            {!query.isLoading && !loadError && rows.length === 0 && (
-              <tr>
-                <td colSpan={colSpan}>{t('ui.list.empty', { resource: resourceText })}</td>
-              </tr>
-            )}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      )}
 
-      <nav aria-label={t('ui.list.pagination', { resource: resource.pluralLabel })}>
-        <button type="button" disabled={!list.hasPrevious} onClick={list.previousPage}>
+      <nav
+        aria-label={t('ui.list.pagination', { resource: resource.pluralLabel })}
+        data-sv-part="pagination"
+      >
+        <Button size="sm" disabled={page <= 1} onClick={() => list.setPage(page - 1)}>
           {t('ui.list.previous')}
-        </button>
-        <button
-          type="button"
-          disabled={!pageInfo?.hasMore || !pageInfo.nextCursor}
-          onClick={() => {
-            if (pageInfo?.nextCursor) list.nextPage(pageInfo.nextCursor)
+        </Button>
+        {lastPage !== undefined &&
+          lastPage > 1 &&
+          pageWindow(page, lastPage).map((p, i) =>
+            p === 'gap' ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: gaps have no identity of their own.
+              <span key={`gap-${i}`} aria-hidden="true">
+                …
+              </span>
+            ) : (
+              <Button
+                key={p}
+                size="sm"
+                aria-label={t('ui.list.page', { page: p })}
+                aria-current={p === page ? 'page' : undefined}
+                onClick={() => list.setPage(p)}
+              >
+                {p}
+              </Button>
+            ),
+          )}
+        <Button size="sm" disabled={!hasNext} onClick={() => list.setPage(page + 1)}>
+          {t('ui.list.next')}
+        </Button>
+        {embedded ? null : (
+          <span>
+            <label htmlFor={`${ids}-size`}>{t('ui.list.pageSize')}</label>{' '}
+            <Select
+              id={`${ids}-size`}
+              value={String(size)}
+              onChange={(e) => list.setPageSize(Number(e.target.value))}
+            >
+              {pageSizeChoices(maxPerPage(resource)).map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </Select>
+          </span>
+        )}
+      </nav>
+      {removal.dialog}
+    </section>
+  )
+}
+
+/** The Columns menu: a toggle button and a popover of checkboxes (the title column stays). */
+function ColumnsMenu(props: {
+  readonly menuId: string
+  readonly fields: readonly FieldDescriptor[]
+  readonly titleField: string
+  readonly hidden: ReadonlySet<string>
+  readonly onToggle: (name: string) => void
+}): ReactElement | null {
+  const { t } = useStrutvane()
+  const { Button, Popover, Checkbox } = useSkins()
+  const [open, setOpen] = useState(false)
+  if (props.fields.length < 2) return null
+  const close = (key: string) => {
+    if (key === 'Escape') setOpen(false)
+  }
+  return (
+    <div data-sv-part="menu-anchor">
+      <Button
+        aria-expanded={open}
+        aria-controls={open ? props.menuId : undefined}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => close(e.key)}
+      >
+        {t('ui.list.columns')}
+      </Button>
+      {open ? (
+        <Popover
+          panelProps={{
+            id: props.menuId,
+            role: 'group',
+            'aria-label': t('ui.list.columns'),
+            onKeyDown: (e) => close(e.key),
           }}
         >
-          {t('ui.list.next')}
-        </button>
-      </nav>
-    </section>
+          {props.fields.map((field) => (
+            <div key={field.name}>
+              <Checkbox
+                id={`${props.menuId}-${field.name}`}
+                checked={!props.hidden.has(field.name)}
+                disabled={field.name === props.titleField}
+                onChange={() => props.onToggle(field.name)}
+              />{' '}
+              <label htmlFor={`${props.menuId}-${field.name}`}>{field.label}</label>
+            </div>
+          ))}
+        </Popover>
+      ) : null}
+    </div>
   )
 }

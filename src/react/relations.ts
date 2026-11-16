@@ -1,9 +1,9 @@
 /**
  * Data hooks for relation fields (belongsTo picker and cell).
  *
- * - {@link useRelationOptions}: a searchable, cursor-paginated option list for the picker. It loads
- *   100 records per page (the protocol maximum) and fetches more on demand, so a target with
- *   thousands of records is fully reachable (ADR-0014 follow-up: "beyond the first 100").
+ * - {@link useRelationOptions}: a searchable, paginated option list for the picker. It loads up to
+ *   100 records per page (the protocol maximum, lowered to the target's `maxPerPage`) and fetches
+ *   more on demand, so a target with thousands of records is fully reachable.
  * - {@link useRelationLabel}: the title of ONE related record, through a per-resource batcher, so a
  *   list of 100 rows costs one request per page of distinct ids, not one per row.
  *
@@ -13,7 +13,9 @@ import type { FieldDescriptor, ListQuery, ResourceDescriptor } from '@strutvane/
 import { LIST_QUERY_LIMITS } from '@strutvane/framework/contracts'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { clampPageSize, MAX_PAGE } from '../core/list-state.ts'
 import { createRecordBatcher, type RecordBatcher } from '../core/record-batcher.ts'
+import { maxPerPage } from '../core/resource-extensions.ts'
 import type { ApiRecord, ResourceApi } from '../core/types.ts'
 import { useResource, useStrutvane } from './context.ts'
 
@@ -70,11 +72,15 @@ export function useRelationOptions(field: FieldDescriptor, search: string): Rela
   const searchable = target?.fields.some((f) => f.searchable) === true
   const text = searchable ? search.trim() : ''
   const titleField = target?.fields.find((f) => f.name === target.titleField)
+  const pageSize = clampPageSize(
+    LIST_QUERY_LIMITS.maxPageSize,
+    target ? maxPerPage(target) : undefined,
+  )
   const query = useInfiniteQuery({
-    queryKey: ['strutvane', 'relation-options', target?.path, text],
+    queryKey: ['strutvane', 'relation-options', target?.path, text, pageSize],
     enabled: target !== undefined,
     staleTime: 60_000,
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: 1,
     queryFn: async ({ pageParam, signal }) => {
       if (!target) return { data: [], meta: { page: { size: 0, hasMore: false } } }
       const listQuery: ListQuery = {
@@ -83,15 +89,13 @@ export function useRelationOptions(field: FieldDescriptor, search: string): Rela
         ...(titleField?.sortable
           ? { sort: [{ field: titleField.name, direction: 'asc' as const }] }
           : {}),
-        page: {
-          kind: 'cursor',
-          size: LIST_QUERY_LIMITS.maxPageSize,
-          ...(pageParam ? { cursor: pageParam } : {}),
-        },
+        // Never more rows than the target allows (its manifest `maxPerPage`), or the API says 422.
+        page: { kind: 'offset', size: pageSize, number: pageParam },
       }
       return api.list(target.path, listQuery, signal)
     },
-    getNextPageParam: (last) => (last.meta.page.hasMore ? last.meta.page.nextCursor : undefined),
+    getNextPageParam: (last, _all, page) =>
+      last.meta.page.hasMore && page < MAX_PAGE ? page + 1 : undefined,
   })
   const options = useMemo(() => {
     if (!query.data) return EMPTY

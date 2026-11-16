@@ -14,7 +14,9 @@
  * @module
  */
 import { LIST_QUERY_LIMITS, type ResourceDescriptor } from '@strutvane/framework/contracts'
+import { clampPageSize } from './list-state.ts'
 import { isApiProblemError } from './problems.ts'
+import { maxPerPage } from './resource-extensions.ts'
 import type { ApiRecord, ResourceApi } from './types.ts'
 
 /** Loads records of one resource by id, batching requests made in the same tick. */
@@ -31,6 +33,8 @@ interface Pending {
 export function createRecordBatcher(api: ResourceApi, resource: ResourceDescriptor): RecordBatcher {
   const idField = resource.fields.find((f) => f.name === 'id')
   const canFilterIn = idField?.filterOperators.includes('in') === true
+  // Never ask for more rows than the resource allows (its manifest `maxPerPage`).
+  const chunkSize = clampPageSize(LIST_QUERY_LIMITS.maxPageSize, maxPerPage(resource))
   let queue = new Map<string, Pending[]>()
   let scheduled = false
 
@@ -39,7 +43,7 @@ export function createRecordBatcher(api: ResourceApi, resource: ResourceDescript
     if (canFilterIn) {
       const result = await api.list(resource.path, {
         filter: { op: 'in', field: 'id', values: ids },
-        page: { kind: 'cursor', size: ids.length },
+        page: { kind: 'offset', size: ids.length, number: 1 },
       })
       for (const record of result.data) found.set(record.id, record)
       return found
@@ -68,8 +72,8 @@ export function createRecordBatcher(api: ResourceApi, resource: ResourceDescript
     queue = new Map()
     scheduled = false
     const ids = [...batch.keys()]
-    for (let i = 0; i < ids.length; i += LIST_QUERY_LIMITS.maxPageSize) {
-      const chunk = ids.slice(i, i + LIST_QUERY_LIMITS.maxPageSize)
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize)
       try {
         const found = await loadChunk(chunk)
         for (const id of chunk) for (const p of batch.get(id) ?? []) p.resolve(found.get(id))

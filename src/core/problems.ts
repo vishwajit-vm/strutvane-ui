@@ -53,12 +53,26 @@ function isIssueParam(value: unknown): value is IssueParam {
   )
 }
 
-/** A validated issue, or `undefined` if the entry is malformed. */
-function sanitizeIssue(value: unknown): ValidationIssue | undefined {
-  if (!isRecord(value)) return undefined
-  const { path, code, message, params } = value
-  if (typeof code !== 'string' || typeof message !== 'string' || !Array.isArray(path))
-    return undefined
+/**
+ * The dotted `field` convenience of an issue (`"items.0.title"`, decision #69) as a path: numeric
+ * segments become array indexes. Used only when an issue has no usable `path` (decision #118).
+ * `undefined` when the text has an empty segment (`"a..b"`), so a malformed field is dropped.
+ *
+ * @example
+ * fieldToPath('items.0.title') // ['items', 0, 'title']
+ */
+export function fieldToPath(field: string): (string | number)[] | undefined {
+  if (field === '') return []
+  const out: (string | number)[] = []
+  for (const part of field.split('.')) {
+    if (part === '') return undefined
+    out.push(/^(?:0|[1-9]\d{0,8})$/.test(part) ? Number(part) : part)
+  }
+  return out
+}
+
+/** A clean copy of an issue path, or `undefined` when any segment is malformed. */
+function cleanSegments(path: readonly unknown[]): (string | number)[] | undefined {
   const cleanPath: (string | number)[] = []
   for (const segment of path) {
     if (typeof segment === 'string') cleanPath.push(segment)
@@ -66,6 +80,24 @@ function sanitizeIssue(value: unknown): ValidationIssue | undefined {
       cleanPath.push(segment)
     else return undefined
   }
+  return cleanPath
+}
+
+/**
+ * A validated issue, or `undefined` if the entry is malformed. The location comes from `path`
+ * first and falls back to the dotted `field` string (decision #118), so a server that sends only
+ * one of them still lands its message on the right field.
+ */
+function sanitizeIssue(value: unknown): ValidationIssue | undefined {
+  if (!isRecord(value)) return undefined
+  const { path, field, code, message, params } = value
+  if (typeof code !== 'string' || typeof message !== 'string') return undefined
+  const cleanPath = Array.isArray(path)
+    ? cleanSegments(path)
+    : typeof field === 'string'
+      ? fieldToPath(field)
+      : undefined
+  if (cleanPath === undefined) return undefined
   const cleanParams: Record<string, IssueParam> = {}
   if (isRecord(params)) {
     for (const [k, v] of Object.entries(params)) if (isIssueParam(v)) cleanParams[k] = v
@@ -115,6 +147,7 @@ const STATUS_CODES: ReadonlyMap<number, string> = new Map([
   [404, 'NOT_FOUND'],
   [409, 'CONFLICT'],
   [413, 'PAYLOAD_TOO_LARGE'],
+  [419, 'csrf_token_mismatch'],
   [422, 'VALIDATION_FAILED'],
   [429, 'RATE_LIMITED'],
   [503, 'SERVICE_UNAVAILABLE'],
@@ -181,7 +214,29 @@ export function problemBannerText(
     return withReference(msg('ui.problem.unavailable'))
   }
   if (problem.status >= 500 || problem.status < 400) return withReference(msg('ui.problem.server'))
+  const key = catalogKey(catalog, problem.code)
+  // A few codes always use the catalogue: the server's detail is generic, while the catalogue says
+  // what happened and what to do (decision #103 for `write_cancelled`, #30 for a refused CSRF check).
+  if (key !== undefined && CATALOGUE_FIRST.has(problem.code.toLowerCase())) return msg(key)
   if (problem.detail) return problem.detail
-  const key = `ui.problem.code.${problem.code}`
-  return Object.hasOwn(catalog, key) ? msg(key) : problem.title
+  return key !== undefined ? msg(key) : problem.title
+}
+
+/** Codes whose catalogue message wins over the server's `detail`. */
+const CATALOGUE_FIRST: ReadonlySet<string> = new Set(['write_cancelled', 'csrf_token_mismatch'])
+
+/**
+ * The catalogue key for a problem code (`ui.problem.code.<code>`), or `undefined`. Codes match
+ * without regard to case: the ecosystem is moving from `SCREAMING_SNAKE_CASE` to lowercase
+ * `snake_case` (decision #68), and the UI reads both while servers migrate.
+ *
+ * @example
+ * catalogKey(defaultMessages, 'WRITE_CANCELLED') // 'ui.problem.code.write_cancelled'
+ */
+export function catalogKey(catalog: MessageCatalog, code: string): string | undefined {
+  for (const candidate of [code, code.toLowerCase()]) {
+    const key = `ui.problem.code.${candidate}`
+    if (Object.hasOwn(catalog, key)) return key
+  }
+  return undefined
 }

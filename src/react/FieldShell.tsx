@@ -1,8 +1,9 @@
 /**
  * `<FieldShell>`: label + widget + help + error, wired for accessibility ONCE (ADR-0014).
  *
- * Every field, every array-item field and every override goes through it, so a custom widget gets
- * correct labelling, `aria-invalid`, `aria-describedby` (help + error) and focus targeting for free.
+ * The design's `Field` skin draws the label, help and error; this component decides their ids and
+ * wiring. Every field, every array-item field and every override goes through it, so a custom
+ * widget gets correct labelling, `aria-invalid`, `aria-describedby` (help + error) and focus targeting for free.
  * Each message is shown once: TanStack Form keeps one error slot per trigger (blur, submit, server)
  * and the same message can sit in several (spike 08 defect).
  *
@@ -13,6 +14,7 @@ import { type ReactElement, useContext } from 'react'
 import { fieldDomId, uniqueMessages } from '../core/issues.ts'
 import { defaultMessages, formatMessage } from '../core/messages.ts'
 import { StrutvaneContext } from './context.ts'
+import { useSkins } from './design-hooks.ts'
 import { RenderBoundary } from './RenderBoundary.tsx'
 import type { Widget } from './types.ts'
 
@@ -50,6 +52,7 @@ export function FieldShell({
   idScope = '',
 }: FieldShellProps): ReactElement {
   const id = fieldDomId(name, idScope)
+  const { Field } = useSkins()
   // Works inside or outside a provider: custom forms may render FieldShell on their own.
   const ctx = useContext(StrutvaneContext)
   const widgetError = ctx
@@ -60,11 +63,14 @@ export function FieldShell({
   const errorId = messages.length > 0 ? `${id}-error` : undefined
   const describedBy = [helpId, errorId].filter((x) => x !== undefined).join(' ') || undefined
   return (
-    <div data-sv-field={name}>
-      <label htmlFor={id}>
-        {field.label}
-        {field.required && !readOnly && <span aria-hidden="true"> *</span>}
-      </label>
+    <Field
+      name={name}
+      label={field.label}
+      htmlFor={id}
+      required={field.required && !readOnly}
+      {...(helpId ? { help: field.help, helpId } : {})}
+      {...(errorId ? { error: messages.join(' '), errorId } : {})}
+    >
       {/* A crashing widget (an override, an unknown field type) must not take the form down: the
           field shows a notice and every other field can still be edited and saved. */}
       <RenderBoundary fallback={<p id={id}>{widgetError}</p>}>
@@ -80,8 +86,6 @@ export function FieldShell({
           describedBy={describedBy}
         />
       </RenderBoundary>
-      {field.help && <p id={helpId}>{field.help}</p>}
-      {errorId && <p id={errorId}>{messages.join(' ')}</p>}
-    </div>
+    </Field>
   )
 }

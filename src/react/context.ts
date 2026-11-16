@@ -21,6 +21,11 @@ export interface StrutvaneContextValue {
   readonly locale: string
   /** Render a catalog message with the registry's messages and the locale. */
   readonly t: (key: string, params?: MessageParams) => string
+  /**
+   * Called when a request answers 401 (the session ended). The app shell opens "sign in again"
+   * over the current screen, so a form keeps its draft. Absent outside the shell.
+   */
+  readonly onUnauthenticated?: () => void
 }
 
 /** The context. `null` outside a provider (the hooks then throw a clear error). */
@@ -33,6 +38,7 @@ export function createContextValue(
   manifest: ResourceManifest,
   registry: UiRegistry,
   locale: string,
+  onUnauthenticated?: () => void,
 ): StrutvaneContextValue {
   return {
     api,
@@ -40,6 +46,7 @@ export function createContextValue(
     registry,
     locale,
     t: (key, params = {}) => formatMessage(registry.messages, key, params, locale),
+    ...(onUnauthenticated ? { onUnauthenticated } : {}),
   }
 }
 

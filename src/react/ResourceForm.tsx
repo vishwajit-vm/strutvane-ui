@@ -13,7 +13,11 @@
  *    value is kept.
  * 4. **Editing** a field clears its server error immediately (the message is now stale).
  * 5. **One submission at a time**: a submit while the previous one is in flight is ignored.
- * 6. **Retries are idempotent**: one `Idempotency-Key` per user action, reused while the outcome is
+ * 6. **Session expiry:** a 401 keeps every value, says so, and asks the shell to offer "sign in
+ *    again" over the form; saving afterwards sends the same draft.
+ * 7. **Unsaved changes:** leaving a changed form (a link, Back, Escape, the browser's Back) asks
+ *    "Leave without saving?" with Keep editing focused; reload and close use the browser prompt.
+ * 8. **Retries are idempotent**: one `Idempotency-Key` per user action, reused while the outcome is
  *    unknown (network error, 5xx, 429), replaced after success or a definitive 4xx answer.
  *
  * Read-only rules: `readOnly` fields are hidden on create and shown read-only on edit; `writeOnce`
@@ -49,6 +53,7 @@ import {
   problemIssues,
 } from '../core/problems.ts'
 import { resolveWidget } from '../core/registry.ts'
+import { recordKey } from '../core/resource-extensions.ts'
 import type { ApiRecord } from '../core/types.ts'
 import {
   COLLECTION_RELATION_TYPES,
@@ -57,7 +62,11 @@ import {
   validateField,
 } from '../core/validation.ts'
 import { useStrutvane } from './context.ts'
+import { ModalDialog } from './Dialog.tsx'
+import { useSkins } from './design-hooks.ts'
 import { errorMessages, FieldShell } from './FieldShell.tsx'
+import { type Crumb, PageHeading } from './PageHeading.tsx'
+import { useNavigationBlocker } from './router.tsx'
 
 type Values = Record<string, unknown>
 type Mode = 'create' | 'edit'
@@ -168,15 +177,20 @@ export function keepIdempotencyKey(problem: Problem): boolean {
 /** Props of {@link ResourceForm}. */
 export interface ResourceFormProps {
   readonly resource: ResourceDescriptor
-  /** Present = edit mode. */
+  /** Present = edit mode: the record's URL key (its route key, such as a slug, else its id). */
   readonly recordId?: string
   readonly onSaved?: (record: ApiRecord) => void
+  /** Shows Cancel; also what Escape does. Leaving with unsaved changes asks first. */
   readonly onCancel?: () => void
+  /** Breadcrumbs of the page heading. */
+  readonly breadcrumbs?: readonly Crumb[]
+  /** The parent page, for the Back control. */
+  readonly parent?: { readonly to: string; readonly label: string }
 }
 
 /** Create / edit form for one resource. Renders nothing the actor is not allowed to do. */
 export function ResourceForm(props: ResourceFormProps): ReactElement | null {
-  const { api, registry, t, locale } = useStrutvane()
+  const { api, registry, t, locale, onUnauthenticated } = useStrutvane()
   const { resource, recordId } = props
   const allowed =
     recordId === undefined ? resource.capabilities.create : resource.capabilities.update
@@ -185,6 +199,10 @@ export function ResourceForm(props: ResourceFormProps): ReactElement | null {
     enabled: recordId !== undefined && allowed,
     queryFn: ({ signal }) => api.get(resource.path, recordId ?? '', signal),
   })
+  const unauthenticated = isApiProblemError(record.error) && record.error.problem.status === 401
+  useEffect(() => {
+    if (unauthenticated) onUnauthenticated?.()
+  }, [unauthenticated, onUnauthenticated])
   if (!allowed) return null
   if (recordId !== undefined) {
     if (record.isLoading)
@@ -207,8 +225,11 @@ function ResourceFormInner({
   onSaved,
   onCancel,
   initial,
+  breadcrumbs,
+  parent,
 }: ResourceFormProps & { readonly initial: ApiRecord | undefined }): ReactElement {
-  const { api, registry, t, locale } = useStrutvane()
+  const { api, registry, t, locale, onUnauthenticated } = useStrutvane()
+  const { Button, Alert } = useSkins()
   const queryClient = useQueryClient()
   const ids = useId()
   const mode: Mode = recordId === undefined ? 'create' : 'edit'
@@ -222,6 +243,26 @@ function ResourceFormInner({
   // before React re-renders, or a script can submit again while the first request is in flight,
   // and the API does not deduplicate Idempotency-Key, so each extra submit would be another record.
   const submitting = useRef(false)
+
+  // Unsaved-changes guard: any change marks the form dirty until it is saved. Leaving (a link,
+  // Back, Escape, the browser's Back) asks first; reloading or closing the tab uses the browser's
+  // own prompt. Never after a successful save (the ref flips before onSaved navigates).
+  const [dirty, setDirty] = useState(false)
+  const saved = useRef(false)
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | undefined>(undefined)
+  const keepEditing = useRef<HTMLButtonElement>(null)
+  useNavigationBlocker(dirty, (proceed) => {
+    if (saved.current) proceed()
+    else setPendingLeave(() => proceed)
+  })
+  useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!saved.current) event.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
 
   // Focus must move AFTER React rendered the error state (the banner may not exist yet, and screen
   // readers should hear the message), so it is requested through state and applied in an effect.
@@ -279,12 +320,17 @@ function ResourceFormInner({
     idempotencyKey.current ??= createIdempotencyKey()
     const options = { idempotencyKey: idempotencyKey.current }
     try {
-      const saved =
+      const record =
         mode === 'create'
           ? await api.create(resource.path, payload, options)
           : await api.update(resource.path, recordId ?? '', payload, options)
       idempotencyKey.current = undefined
-      queryClient.setQueryData(['strutvane', 'record', resource.path, saved.id], saved)
+      saved.current = true
+      setDirty(false)
+      queryClient.setQueryData(
+        ['strutvane', 'record', resource.path, recordKey(resource, record)],
+        record,
+      )
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['strutvane', 'list', resource.path] }),
         queryClient.invalidateQueries({ queryKey: ['strutvane', 'relation-label', resource.path] }),
@@ -292,7 +338,7 @@ function ResourceFormInner({
           queryKey: ['strutvane', 'relation-options', resource.path],
         }),
       ])
-      onSaved?.(saved)
+      onSaved?.(record)
     } catch (error) {
       if (!isApiProblemError(error)) {
         // Not a problem we understand: the outcome is unknown, so keep the key for the retry.
@@ -302,7 +348,12 @@ function ResourceFormInner({
       const problem = error.problem
       if (!keepIdempotencyKey(problem)) idempotencyKey.current = undefined
       const issues = problemIssues(problem)
-      if (problem.status === 422 && issues.length > 0) applyServerIssues(issues, value)
+      if (problem.status === 401) {
+        // The session ended: keep every typed value, and let the shell offer "sign in again" over
+        // this form. Saving again after signing in sends the same draft.
+        showBanner([t('ui.form.signInAgain')])
+        onUnauthenticated?.()
+      } else if (problem.status === 422 && issues.length > 0) applyServerIssues(issues, value)
       else showBanner([problemBannerText(problem, registry.messages, locale)])
     }
   }
@@ -345,6 +396,7 @@ function ResourceFormInner({
           onBlur={f.handleBlur}
           onChange={(v) => {
             f.handleChange(v)
+            setDirty(true)
             if (f.state.meta.errorMap['onServer'] !== undefined) {
               f.setMeta(withServerError(undefined))
               serverErrorFields.current.delete(name)
@@ -356,10 +408,22 @@ function ResourceFormInner({
   )
 
   const resourceText = resource.label.toLowerCase()
+  const title =
+    mode === 'create'
+      ? t('ui.form.create', { resource: resourceText })
+      : t('ui.form.edit', { resource: resourceText })
   return (
     <form
       aria-labelledby={`${ids}-title`}
       noValidate
+      data-sv-part="form"
+      onKeyDown={(e) => {
+        // Escape leaves the form like Cancel (and asks first when there are changes).
+        if (e.key === 'Escape' && onCancel && !e.defaultPrevented) {
+          e.preventDefault()
+          onCancel()
+        }
+      }}
       onSubmit={(e) => {
         e.preventDefault()
         if (submitting.current) return
@@ -370,18 +434,19 @@ function ResourceFormInner({
         })
       }}
     >
-      <h2 id={`${ids}-title`}>
-        {mode === 'create'
-          ? t('ui.form.create', { resource: resourceText })
-          : t('ui.form.edit', { resource: resourceText })}
-      </h2>
+      <PageHeading
+        title={title}
+        titleId={`${ids}-title`}
+        {...(breadcrumbs ? { breadcrumbs } : {})}
+        {...(parent ? { parent } : {})}
+      />
 
       {banner.length > 0 && (
-        <div ref={bannerRef} role="alert" tabIndex={-1}>
+        <Alert tone="danger" ref={bannerRef} role="alert" tabIndex={-1}>
           {banner.map((m) => (
             <p key={m}>{m}</p>
           ))}
-        </div>
+        </Alert>
       )}
 
       {fields.map(({ field, readOnly }) =>
@@ -402,20 +467,45 @@ function ResourceFormInner({
 
       <form.Subscribe selector={(s) => s.isSubmitting}>
         {(isSubmitting) => (
-          <div>
-            <button type="submit" disabled={isSubmitting}>
+          <div data-sv-part="form-actions">
+            <Button type="submit" variant="primary" disabled={isSubmitting}>
               {mode === 'create'
                 ? t('ui.form.submitCreate', { resource: resourceText })
                 : t('ui.form.submitEdit')}
-            </button>
-            {onCancel && (
-              <button type="button" onClick={onCancel}>
-                {t('ui.form.cancel')}
-              </button>
-            )}
+            </Button>
+            {onCancel && <Button onClick={onCancel}>{t('ui.form.cancel')}</Button>}
           </div>
         )}
       </form.Subscribe>
+      {pendingLeave ? (
+        <ModalDialog
+          role="alertdialog"
+          title={t('ui.form.unsavedTitle')}
+          description={t('ui.form.unsavedBody')}
+          initialFocus={keepEditing}
+          onClose={() => setPendingLeave(undefined)}
+          size="sm"
+          footer={
+            <>
+              <Button ref={keepEditing} onClick={() => setPendingLeave(undefined)}>
+                {t('ui.form.keepEditing')}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const proceed = pendingLeave
+                  setPendingLeave(undefined)
+                  saved.current = true
+                  setDirty(false)
+                  proceed()
+                }}
+              >
+                {t('ui.form.discard')}
+              </Button>
+            </>
+          }
+        />
+      ) : null}
     </form>
   )
 }
@@ -444,6 +534,7 @@ function ArrayFieldEditor({
   renderField,
 }: ArrayFieldEditorProps): ReactElement {
   const { t } = useStrutvane()
+  const { Button } = useSkins()
   const props = Object.entries(itemProperties(field))
   const blank = Object.fromEntries(props.map(([p]) => [p, null]))
   const groupId = fieldDomId(field.name, idScope)
@@ -476,16 +567,16 @@ function ArrayFieldEditor({
                   ),
                 )}
                 {!readOnly && (
-                  <button type="button" onClick={() => arrayField.removeValue(index)}>
+                  <Button size="sm" onClick={() => arrayField.removeValue(index)}>
                     {t('ui.form.remove', { item, index: index + 1 })}
-                  </button>
+                  </Button>
                 )}
               </fieldset>
             ))}
             {!readOnly && (
-              <button type="button" onClick={() => arrayField.pushValue({ ...blank })}>
+              <Button size="sm" onClick={() => arrayField.pushValue({ ...blank })}>
                 {t('ui.form.add', { item })}
-              </button>
+              </Button>
             )}
           </fieldset>
         )

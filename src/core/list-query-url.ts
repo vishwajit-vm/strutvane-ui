@@ -31,7 +31,7 @@ import {
   isFilterOperator,
   type SimpleFilter,
 } from './filter-builder.ts'
-import { clampPageSize, type ListState } from './list-state.ts'
+import { clampPage, clampPageSize, type ListState } from './list-state.ts'
 
 /** Why a URL parameter was dropped. */
 export type UrlRejection =
@@ -57,7 +57,7 @@ export interface ParsedSearch {
 const FILTER_KEY = /^filter\[([^\]]*)\]\[([^\]]*)\]$/
 /** Longest search text the server accepts, in UTF-16 code units (ADR-0011 list-query limits). */
 export const MAX_SEARCH_LENGTH = 200
-const SINGLE_KEYS: ReadonlySet<string> = new Set(['search', 'sort', 'page[size]', 'page[cursor]'])
+const SINGLE_KEYS: ReadonlySet<string> = new Set(['search', 'sort', 'page[size]', 'page[number]'])
 
 /** Serialize list state to a query string (without the leading `?`). Deterministic order. */
 export function toSearchString(state: ListState): string {
@@ -76,7 +76,7 @@ export function toSearchString(state: ListState): string {
   }
   const size = clampPageSize(state.pageSize)
   if (size !== LIST_QUERY_LIMITS.defaultPageSize) out.append('page[size]', String(size))
-  if (state.cursor) out.append('page[cursor]', state.cursor)
+  if (state.page > 1) out.append('page[number]', String(clampPage(state.page)))
   return out.toString()
 }
 
@@ -93,7 +93,7 @@ export function parseSearchString(search: string, resource: ResourceDescriptor):
   let sort: SortDirective[] = []
   let searchText = ''
   let pageSize: number = LIST_QUERY_LIMITS.defaultPageSize
-  let cursor: string | undefined
+  let page = 1
 
   for (const key of new Set(params.keys())) {
     const values = params.getAll(key)
@@ -115,8 +115,8 @@ export function parseSearchString(search: string, resource: ResourceDescriptor):
       continue
     }
     if (!SINGLE_KEYS.has(key)) {
-      // `page[number]` is valid on the wire, but these lists paginate by cursor.
-      reject(key, key === 'page[number]' ? 'unsupported_parameter' : 'unknown_parameter')
+      // `page[cursor]` is valid on the wire, but these lists use numbered pages (blueprint §5).
+      reject(key, key === 'page[cursor]' ? 'unsupported_parameter' : 'unknown_parameter')
       continue
     }
     if (values.length > 1) reject(key, 'duplicate_parameter') // the first value wins
@@ -125,8 +125,11 @@ export function parseSearchString(search: string, resource: ResourceDescriptor):
       // The server refuses these (422) instead of ignoring them: drop them here, like any bad value.
       if (value.length > MAX_SEARCH_LENGTH || value.includes('\u0000')) reject(key, 'invalid_value')
       else searchText = value
-    } else if (key === 'page[cursor]') cursor = value || undefined
-    else if (key === 'page[size]') {
+    } else if (key === 'page[number]') {
+      const n = Number(value)
+      page = clampPage(n)
+      if (value === '' || page !== n) reject(key, 'invalid_value')
+    } else if (key === 'page[size]') {
       const n = Number(value)
       pageSize = clampPageSize(n)
       if (value === '' || pageSize !== n) reject(key, 'invalid_value')
@@ -142,7 +145,7 @@ export function parseSearchString(search: string, resource: ResourceDescriptor):
     }
   }
   return {
-    state: { filters, sort, search: searchText, pageSize, ...(cursor ? { cursor } : {}) },
+    state: { filters, sort, search: searchText, pageSize, page },
     rejected,
   }
 }

@@ -24,6 +24,7 @@ import { createIdempotencyKey } from './ids.ts'
 import { listQueryToSearchString } from './list-query-url.ts'
 import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
 import type { ApiRecord, MutationOptions, ResourceApi } from './types.ts'
+import { type XsrfOptions, xsrfHeaders } from './xsrf.ts'
 
 /** Options for {@link createHttpClient}. */
 export interface HttpClientOptions {
@@ -37,6 +38,46 @@ export interface HttpClientOptions {
   readonly credentials?: RequestCredentials
   /** Override key generation (tests). */
   readonly createIdempotencyKey?: () => string
+  /**
+   * The CSRF header (decision #17): on by default, reading the `XSRF-TOKEN` cookie and sending
+   * `X-XSRF-TOKEN` on every write. `false` turns it off (a bearer-token API needs no CSRF check).
+   */
+  readonly xsrf?: XsrfOptions | false
+  /**
+   * How many times a READ is retried after no answer (offline) or a 5xx. Default 2. Writes are
+   * never retried here: only the user decides to send a write again, with the same idempotency key.
+   */
+  readonly readRetries?: number
+  /** Wait before retry number `attempt` (1-based), in ms. Default `300 * attempt`. */
+  readonly retryDelay?: (attempt: number) => number
+  /** Sleep used between retries (tests pass an instant one). */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
+}
+
+/** A sleep that ends early (rejecting) when the signal aborts. */
+function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        reject(signal.reason)
+      },
+      { once: true },
+    )
+  })
+}
+
+/** Whether a failed read may be tried again: no answer, or a server-side failure. Never a 4xx. */
+export function isRetryableRead(error: unknown): boolean {
+  return (
+    error instanceof ApiProblemError && (error.problem.status === 0 || error.problem.status >= 500)
+  )
 }
 
 const JSON_ACCEPT = 'application/json, application/problem+json'
@@ -130,7 +171,7 @@ export function createHttpClient(options: HttpClientOptions): ResourceApi {
     return [base, ...parts.map(segment), ...rest.map(segment)].join('/')
   }
 
-  async function request(
+  async function send(
     method: string,
     target: string,
     init: {
@@ -141,7 +182,11 @@ export function createHttpClient(options: HttpClientOptions): ResourceApi {
   ): Promise<unknown> {
     const extra =
       typeof options.headers === 'function' ? options.headers() : (options.headers ?? {})
-    const headers: Record<string, string> = { accept: JSON_ACCEPT, ...extra }
+    const headers: Record<string, string> = {
+      accept: JSON_ACCEPT,
+      ...extra,
+      ...xsrfHeaders(method, options.xsrf),
+    }
     if (init.body !== undefined) headers['content-type'] = 'application/json'
     if (init.idempotencyKey !== undefined) headers['idempotency-key'] = init.idempotencyKey
     let response: Response
@@ -174,19 +219,56 @@ export function createHttpClient(options: HttpClientOptions): ResourceApi {
     }
   }
 
+  const retries = Math.max(0, Math.floor(options.readRetries ?? 2))
+  const delay = options.retryDelay ?? ((attempt: number) => 300 * attempt)
+  const sleep = options.sleep ?? defaultSleep
+
+  /**
+   * Send a request. Reads (GET, and the read-only `POST …/query`) are retried on no answer or a
+   * 5xx, at most `readRetries` times; an abort stops at once. Writes go out exactly once.
+   */
+  async function request(
+    method: string,
+    target: string,
+    init: {
+      body?: unknown
+      signal?: AbortSignal | undefined
+      idempotencyKey?: string | undefined
+      read?: boolean
+    } = {},
+  ): Promise<unknown> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await send(method, target, init)
+      } catch (error) {
+        if (!init.read || attempt >= retries || init.signal?.aborted || !isRetryableRead(error))
+          throw error
+        await sleep(delay(attempt + 1), init.signal)
+      }
+    }
+  }
+
   const mutationKey = (o: MutationOptions | undefined) => o?.idempotencyKey ?? newKey()
 
   return {
     async list(path, query, signal) {
-      const search = listQueryToSearchString(query)
+      const plain = listQueryToSearchString(query)
+      // Numbered pages need the total to show "Showing 26–50 of 312" and the last page number.
+      const search =
+        plain !== undefined && query.page?.kind === 'offset'
+          ? [plain, 'page[total]=true'].filter((part) => part !== '').join('&')
+          : plain
       const body =
         search === undefined
-          ? await request('POST', url(path, 'query'), { body: query, signal })
-          : await request('GET', search ? `${url(path)}?${search}` : url(path), { signal })
+          ? await request('POST', url(path, 'query'), { body: query, signal, read: true })
+          : await request('GET', search ? `${url(path)}?${search}` : url(path), {
+              signal,
+              read: true,
+            })
       return readList(body, query)
     },
     async get(path, id, signal) {
-      return readRecord(await request('GET', url(path, id), { signal }))
+      return readRecord(await request('GET', url(path, id), { signal, read: true }))
     },
     async create(path, values, o) {
       return readRecord(
@@ -208,6 +290,14 @@ export function createHttpClient(options: HttpClientOptions): ResourceApi {
     },
     async delete(path, id, o) {
       await request('DELETE', url(path, id), { signal: o?.signal, idempotencyKey: mutationKey(o) })
+    },
+    async restore(path, id, o) {
+      // `POST {path}/{id}/restore` (decision #56): undoes a soft delete.
+      const body = await request('POST', url(path, id, 'restore'), {
+        signal: o?.signal,
+        idempotencyKey: mutationKey(o),
+      })
+      return body === undefined ? undefined : readRecord(body)
     },
   }
 }
