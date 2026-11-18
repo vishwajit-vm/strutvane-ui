@@ -18,7 +18,24 @@
 - Docs: README, `docs/migrating-from-v1.md`, CLAUDE.md; changeset `lowercase-error-codes.md`
   (minor). Hub RFC-0003 amended in the hub repo.
 
+## Done: deterministic search debounces (after a load-induced flake)
+- The coordinator's re-run of a9e8751 failed `ResourceList › search goes to the server (debounced)`
+  under heavy load: the 300 ms debounce plus rendering outlasted `waitFor`'s 1 s budget. Typing
+  slower than the debounce could also split one word into two requests (the old test only checked
+  `<= 2`).
+- Whole class fixed: every screen test that types into a debounced search (list search, command
+  palette, relation picker, the filter-chip test) now runs `useDebouncedValue` on a manual clock
+  (`test/debounce-clock.ts`, wired with `vi.mock`). Time moves only on `debounceClock.advance()`.
+  The list and picker tests now prove: no request at debounce − 1 ms, then **exactly one** request
+  carrying the whole word, and nothing pending afterwards.
+- The real hook is proven on fake timers in `test/debounce.test.tsx` (fires once, `delay` ms after
+  the last change; unmount cancels), next to a check that the manual clock behaves the same.
+- Not changed: tests that sleep briefly and then assert that nothing *more* happened (ResourceList
+  callbacks/URL, ResourceForm single submit, StrutvaneApp switch/sign-out). Load can only make them
+  pass more easily, never fail, so they are not this flake.
+
 ## How it was verified
+- Debounce fix: gate 2 of 3 green before a STOP (usage limit); run 3 not done. Re-run `npm run ci` 3× before merging.
 - Against framework `main` 6dfc239 (0.2.0-next.0, not on npm): built and `npm pack`ed in a
   scratchpad worktree, then `npm ci` is impossible (see below), so the dependencies came from the
   committed lockfile plus `npm install --no-save --ignore-scripts <tarball>`. `package.json` and

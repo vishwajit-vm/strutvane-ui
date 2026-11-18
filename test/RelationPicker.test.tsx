@@ -4,9 +4,10 @@
 import type { FieldDescriptor } from '@strutvane/framework/contracts'
 import { screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { RelationCell } from '../src/react/cells.tsx'
 import { RelationPickerWidget } from '../src/react/widgets.tsx'
+import { debounceClock } from './debounce-clock.ts'
 import { FakeApi, type Row } from './fixtures/fake-api.ts'
 import {
   customerResource,
@@ -17,7 +18,16 @@ import {
 } from './fixtures/manifest.ts'
 import { makeInvoices, renderWithUI } from './helpers.tsx'
 
+// Search-as-you-type runs on a manual clock (see debounce-clock.ts): no test depends on machine speed.
+vi.mock('../src/react/relations.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/react/relations.ts')>()),
+  useDebouncedValue: (await import('./debounce-clock.ts')).useManualDebouncedValue,
+}))
+beforeEach(() => debounceClock.reset())
+
 const MANY = 250
+/** The relation picker's search debounce (widgets.tsx). */
+const PICKER_SEARCH_DEBOUNCE_MS = 250
 const manyCustomers: Row[] = Array.from({ length: MANY }, (_, i) => ({
   id: `c${String(i + 1).padStart(3, '0')}`,
   name: `Customer ${String(i + 1).padStart(3, '0')}`,
@@ -80,9 +90,13 @@ describe('relation picker with more than 100 records', () => {
     renderWithUI(<Picker />, { api })
     await waitFor(() => expect(optionCount()).toBe(100))
     const user = userEvent.setup()
+    const before = api.requests.length
     await user.type(screen.getByRole('searchbox', { name: 'Search Customers' }), 'Customer 24')
+    debounceClock.advance(PICKER_SEARCH_DEBOUNCE_MS - 1)
+    expect(api.requests.length).toBe(before) // no request per keystroke
+    debounceClock.advance(1)
     await waitFor(() => expect(optionCount()).toBe(10)) // 240..249
-    expect(api.requests.at(-1)?.query.search).toBe('Customer 24')
+    expect(api.requests.slice(before).map((r) => r.query.search)).toEqual(['Customer 24'])
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 

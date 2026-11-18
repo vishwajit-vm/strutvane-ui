@@ -4,13 +4,24 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { ResourceApi } from '../src/core/types.ts'
 import { ResourceList, type ResourceListProps } from '../src/react/ResourceList.tsx'
 import type { Cell } from '../src/react/types.ts'
+import { debounceClock } from './debounce-clock.ts'
 import { type FakeApi, problem } from './fixtures/fake-api.ts'
 import { invoiceResource, withCapabilities } from './fixtures/manifest.ts'
 import { axeViolations, renderWithUI, seededApi, showing } from './helpers.tsx'
+
+// Search-as-you-type runs on a manual clock (see debounce-clock.ts): no test depends on machine speed.
+vi.mock('../src/react/relations.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/react/relations.ts')>()),
+  useDebouncedValue: (await import('./debounce-clock.ts')).useManualDebouncedValue,
+}))
+beforeEach(() => debounceClock.reset())
+
+/** `SEARCH_DEBOUNCE_MS` in ResourceList.tsx. */
+const LIST_SEARCH_DEBOUNCE_MS = 300
 
 const lastQuery = (api: FakeApi) => api.requests.filter((r) => r.path === 'invoices').at(-1)?.query
 
@@ -160,10 +171,17 @@ describe('ResourceList → ListQuery', () => {
   test('search goes to the server (debounced: one request for the whole word)', async () => {
     const { api, user } = await renderList()
     const before = api.requests.length
+    // However slowly the keys arrive, time stands still: no keystroke reaches the server.
     await user.type(screen.getByLabelText('Search Invoices'), 'INV-1029')
-    await waitFor(() => expect(lastQuery(api)?.search).toBe('INV-1029'))
+    debounceClock.advance(LIST_SEARCH_DEBOUNCE_MS - 1)
+    expect(api.requests.length).toBe(before)
+    // The debounce ends: exactly one request, carrying the whole word.
+    debounceClock.advance(1)
+    await waitFor(() => expect(api.requests.length - before).toBe(1))
+    expect(lastQuery(api)?.search).toBe('INV-1029')
     await screen.findByText(showing(1))
-    expect(api.requests.length - before).toBeLessThanOrEqual(2)
+    expect(debounceClock.pending()).toBe(0)
+    expect(api.requests.length - before).toBe(1)
   })
 
   test('numbered pages: "Showing 1–25 of 30", page buttons, Next and Previous', async () => {

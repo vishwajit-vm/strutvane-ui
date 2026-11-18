@@ -6,10 +6,21 @@
 // the theme switch and package pages in the sidebar.
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { StrutvaneApp } from '../src/react/StrutvaneApp.tsx'
 import { createReferenceApi } from '../src/testing/reference-api.ts'
+import { debounceClock } from './debounce-clock.ts'
 import { axeViolations } from './helpers.tsx'
+
+// Search-as-you-type runs on a manual clock (see debounce-clock.ts): no test depends on machine speed.
+vi.mock('../src/react/relations.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/react/relations.ts')>()),
+  useDebouncedValue: (await import('./debounce-clock.ts')).useManualDebouncedValue,
+}))
+/** The command palette's record-search debounce (CommandPalette.tsx). */
+const PALETTE_DEBOUNCE_MS = 250
+/** The list search debounce (ResourceList.tsx). */
+const LIST_SEARCH_DEBOUNCE_MS = 300
 
 const PASSWORD = 'correct horse battery staple'
 const PALETTE = 'Search screens, records and commands'
@@ -28,6 +39,7 @@ const heading = (name: string | RegExp) => screen.findByRole('heading', { level:
 const onList = () => screen.findByRole('region', { name: 'Posts table' })
 
 beforeEach(() => {
+  debounceClock.reset()
   localStorage.clear()
   // biome-ignore lint/suspicious/noDocumentCookie: the test plays the framework, which sets this cookie.
   document.cookie = 'XSRF-TOKEN=; max-age=0'
@@ -76,6 +88,7 @@ describe('command palette', () => {
 
     await user.keyboard('/')
     await user.type(await screen.findByRole('combobox', { name: PALETTE }), 'notes 30')
+    debounceClock.advance(PALETTE_DEBOUNCE_MS)
     const option = await screen.findByRole('option', { name: /^Launch notes 30/ })
     expect(option).toHaveTextContent('Launch notes 30 · Post')
     await user.click(option)
@@ -96,6 +109,7 @@ describe('command palette', () => {
 
     await user.keyboard('{Control>}k{/Control}')
     await user.type(await screen.findByRole('combobox', { name: PALETTE }), 'zzzz-nothing')
+    debounceClock.advance(PALETTE_DEBOUNCE_MS)
     expect(await screen.findByText('Nothing matches “zzzz-nothing”.')).toBeInTheDocument()
     await user.clear(screen.getByRole('combobox', { name: PALETTE }))
     await user.type(screen.getByRole('combobox', { name: PALETTE }), 'dark')
@@ -140,6 +154,7 @@ describe('list conveniences', () => {
     const { user } = start('/posts?filter[status][eq]=draft')
     await screen.findByText('Showing 1–10 of 10 posts')
     await user.type(screen.getByLabelText('Search Posts'), 'notes 1')
+    debounceClock.advance(LIST_SEARCH_DEBOUNCE_MS)
     const chips = await screen.findByRole('list', { name: 'Active filters' })
     await within(chips).findByText('Search: notes 1')
     await user.click(screen.getByRole('button', { name: 'Remove search: notes 1' }))
