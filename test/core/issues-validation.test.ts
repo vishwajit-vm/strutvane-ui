@@ -51,13 +51,13 @@ describe('issue routing', () => {
   test('deepest rendered field wins; falls back to parents; unknown and [] become form errors', () => {
     const routed = routeIssues(
       [
-        { path: ['lines', 1, 'amount'], code: 'too_small', message: 'm1' },
-        { path: ['lines', 7, 'amount'], code: 'too_small', message: 'm2' },
-        { path: ['number'], code: 'unique', message: 'm3' },
-        { path: [], code: 'conflict', message: 'm4' },
-        { path: ['nonexistent'], code: 'x', message: 'm5' },
-        { path: ['address', 'city'], code: 'x', message: 'm6' },
-        { path: ['address', 'zip'], code: 'x', message: 'm7' },
+        { path: ['lines', 1, 'amount'], field: 'lines.1.amount', code: 'too_small', message: 'm1' },
+        { path: ['lines', 7, 'amount'], field: 'lines.7.amount', code: 'too_small', message: 'm2' },
+        { path: ['number'], field: 'number', code: 'unique', message: 'm3' },
+        { path: [], field: '', code: 'conflict', message: 'm4' },
+        { path: ['nonexistent'], field: 'nonexistent', code: 'x', message: 'm5' },
+        { path: ['address', 'city'], field: 'address.city', code: 'x', message: 'm6' },
+        { path: ['address', 'zip'], field: 'address.zip', code: 'x', message: 'm7' },
       ],
       rendered,
     )
@@ -77,10 +77,10 @@ describe('issue routing', () => {
   test('each message is kept once per target', () => {
     const routed = routeIssues(
       [
-        { path: ['number'], code: 'a', message: 'same' },
-        { path: ['number'], code: 'b', message: 'same' },
-        { path: [], code: 'c', message: 'top' },
-        { path: ['ghost'], code: 'c', message: 'top' },
+        { path: ['number'], field: 'number', code: 'a', message: 'same' },
+        { path: ['number'], field: 'number', code: 'b', message: 'same' },
+        { path: [], field: '', code: 'c', message: 'top' },
+        { path: ['ghost'], field: 'ghost', code: 'c', message: 'top' },
       ],
       rendered,
     )
@@ -103,6 +103,7 @@ describe('validation (client) uses the shared catalog', () => {
     )
     expect(validateField(f('amount'), -1, defaultMessages)[0]).toMatchObject({
       path: ['amount'],
+      field: 'amount',
       code: 'too_small',
       params: { min: 0 },
       message: 'Amount must be at least 0.',

@@ -109,7 +109,7 @@ export class FakeApi implements ResourceApi {
     const row = this.table(path).find((r) => r.id === id)
     if (!row) {
       throw new ApiProblemError(
-        problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
+        problem(404, 'not_found', 'Not found', 'This record no longer exists.'),
       )
     }
     return row
@@ -147,7 +147,7 @@ export class FakeApi implements ResourceApi {
     const current = table[index]
     if (index < 0 || !current) {
       throw new ApiProblemError(
-        problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
+        problem(404, 'not_found', 'Not found', 'This record no longer exists.'),
       )
     }
     const merged = { ...current, ...values }
@@ -164,7 +164,7 @@ export class FakeApi implements ResourceApi {
     const index = table.findIndex((row) => row.id === id)
     if (index < 0) {
       throw new ApiProblemError(
-        problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
+        problem(404, 'not_found', 'Not found', 'This record no longer exists.'),
       )
     }
     const [removed] = table.splice(index, 1)
@@ -177,7 +177,7 @@ export class FakeApi implements ResourceApi {
     const row = this.trash.get(`${path}/${id}`)
     if (!row) {
       throw new ApiProblemError(
-        problem(404, 'NOT_FOUND', 'Not found', 'This record no longer exists.'),
+        problem(404, 'not_found', 'Not found', 'This record no longer exists.'),
       )
     }
     this.trash.delete(`${path}/${id}`)
@@ -203,6 +203,7 @@ export class FakeApi implements ResourceApi {
       if (v !== undefined && this.table(r.path).some((row) => row.id !== id && row[f.name] === v)) {
         issues.push({
           path: [f.name],
+          field: f.name,
           code: 'unique',
           message: formatMessage(defaultMessages, 'unique', { attribute: f.label.toLowerCase() }),
         })
@@ -218,6 +219,7 @@ export class FakeApi implements ResourceApi {
     ) {
       issues.push({
         path: ['dueDate'],
+        field: 'dueDate',
         code: 'date_before_field',
         params: { other: 'Issue date' },
         message: formatMessage(defaultMessages, 'date_before_field', {
@@ -228,7 +230,7 @@ export class FakeApi implements ResourceApi {
     }
     if (issues.length > 0) {
       throw new ApiProblemError({
-        ...problem(422, 'VALIDATION_FAILED', 'Validation failed'),
+        ...problem(422, 'validation_failed', 'Validation failed'),
         issues,
       })
     }
@@ -242,13 +244,13 @@ export class FakeApi implements ResourceApi {
 
   private resource(path: string): ResourceDescriptor {
     const r = this.resources.get(path)
-    if (!r) throw new ApiProblemError(problem(404, 'NOT_FOUND', 'Not found'))
+    if (!r) throw new ApiProblemError(problem(404, 'not_found', 'Not found'))
     return r
   }
 
   private table(path: string): Row[] {
     const t = this.tables.get(path)
-    if (!t) throw new ApiProblemError(problem(404, 'NOT_FOUND', 'Not found'))
+    if (!t) throw new ApiProblemError(problem(404, 'not_found', 'Not found'))
     return t
   }
 }

@@ -24,9 +24,9 @@ function api(overrides: Partial<ResourceApi> = {}): ResourceApi {
     }),
     get: vi.fn(async (_p: string, id: string) => {
       if (id === 'missing')
-        throw new ApiProblemError({ type: 't', title: 'Not found', status: 404, code: 'NOT_FOUND' })
+        throw new ApiProblemError({ type: 't', title: 'Not found', status: 404, code: 'not_found' })
       if (id === 'boom')
-        throw new ApiProblemError({ type: 't', title: 'Err', status: 500, code: 'INTERNAL_ERROR' })
+        throw new ApiProblemError({ type: 't', title: 'Err', status: 500, code: 'internal_error' })
       return { id, name: `N-${id}` }
     }),
     create: vi.fn(),

@@ -6,10 +6,10 @@
  *
  * Failure handling (RFC-0003 §4):
  * - Every non-2xx response becomes an {@link ApiProblemError} carrying a sanitized {@link Problem};
- *   a body that is not a problem maps to a code by status, else `INTERNAL_ERROR` (row 16).
- * - A 2xx response with an unexpected shape is ALSO an `INTERNAL_ERROR` problem, never a crash
+ *   a body that is not a problem maps to a code by status, else `internal_error` (row 16).
+ * - A 2xx response with an unexpected shape is ALSO an `internal_error` problem, never a crash
  *   further down in a component.
- * - Transport failures (offline, DNS, CORS) become status `0` / `NETWORK_ERROR`. An abort is
+ * - Transport failures (offline, DNS, CORS) become status `0` / `network_error`. An abort is
  *   re-thrown unchanged so callers (TanStack Query) can tell cancellation from failure.
  * - Mutations always send an `Idempotency-Key` header (row 12). Pass the same key to retry the same
  *   user action; when none is given, a fresh one is generated per call.
@@ -22,7 +22,12 @@
 import type { ListQuery, ListResult, PageInfo, Problem } from '@strutvane/framework/contracts'
 import { createIdempotencyKey } from './ids.ts'
 import { listQueryToSearchString } from './list-query-url.ts'
-import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
+import {
+  ApiProblemError,
+  INTERNAL_ERROR_CODE,
+  networkProblem,
+  problemFromResponse,
+} from './problems.ts'
 import type { ApiRecord, MutationOptions, ResourceApi } from './types.ts'
 import { type XsrfOptions, xsrfHeaders } from './xsrf.ts'
 
@@ -88,7 +93,7 @@ function unexpectedShape(detail: string): ApiProblemError {
     type: 'about:blank',
     title: 'Unexpected response',
     status: 500,
-    code: 'INTERNAL_ERROR',
+    code: INTERNAL_ERROR_CODE,
     detail,
   }
   return new ApiProblemError(problem)

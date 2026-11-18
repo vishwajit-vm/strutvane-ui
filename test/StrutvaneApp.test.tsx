@@ -57,17 +57,17 @@ function fakeServer(
       })
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/v1/auth/me':
-          return server.signedIn ? json(actor()) : problem(401, 'UNAUTHENTICATED')
+          return server.signedIn ? json(actor()) : problem(401, 'unauthenticated')
         case 'POST /api/v1/auth/sign-in': {
           const body = JSON.parse(String(init?.body)) as { password: string }
           attempts++
-          if (attempts > 3) return problem(429, 'RATE_LIMITED', { 'retry-after': '42' })
+          if (attempts > 3) return problem(429, 'rate_limited', { 'retry-after': '42' })
           if (body.password !== 'correct-password') return problem(401, 'INVALID_CREDENTIALS')
           server.signedIn = true
           return json(actor())
         }
         case 'POST /api/v1/auth/sign-out':
-          if (options.failSignOut) return problem(options.failSignOut, 'SERVICE_UNAVAILABLE')
+          if (options.failSignOut) return problem(options.failSignOut, 'service_unavailable')
           server.signedIn = false
           return new Response(null, { status: 204 })
         case 'GET /api/v1/auth/tenants':
@@ -80,27 +80,27 @@ function fakeServer(
             })),
           })
         case 'POST /api/v1/auth/switch-tenant':
-          if (options.failSwitch) return problem(options.failSwitch, 'FORBIDDEN')
+          if (options.failSwitch) return problem(options.failSwitch, 'forbidden')
           tenantId = (JSON.parse(String(init?.body)) as { tenantId: string }).tenantId
           return json(actor())
         case 'GET /.well-known/strutvane.json':
-          return server.signedIn ? json(manifest) : problem(401, 'UNAUTHENTICATED')
+          return server.signedIn ? json(manifest) : problem(401, 'unauthenticated')
       }
       if (server.failNext) {
         const status = server.failNext
         server.failNext = undefined
-        return problem(status, status === 401 ? 'UNAUTHENTICATED' : 'ERROR')
+        return problem(status, status === 401 ? 'unauthenticated' : 'ERROR')
       }
       if (method === 'GET' && url.pathname === '/api/v1/customers')
         return json({ data: customers, meta: { page: { size: 25, hasMore: false } } })
       const one = /^\/api\/v1\/customers\/([^/]+)$/.exec(url.pathname)
       if (method === 'GET' && one) {
         const row = customers.find((c) => c.id === one[1])
-        return row ? json(row) : problem(404, 'NOT_FOUND')
+        return row ? json(row) : problem(404, 'not_found')
       }
       if (method === 'GET' && url.pathname === '/api/v1/invoices')
         return json({ data: [], meta: { page: { size: 25, hasMore: false } } })
-      return problem(404, 'NOT_FOUND')
+      return problem(404, 'not_found')
     },
   }
   return server
@@ -440,6 +440,6 @@ describe('router and session client helpers', () => {
         throw new TypeError('offline')
       },
     })
-    await expect(offline.tenants()).rejects.toMatchObject({ problem: { code: 'NETWORK_ERROR' } })
+    await expect(offline.tenants()).rejects.toMatchObject({ problem: { code: 'network_error' } })
   })
 })

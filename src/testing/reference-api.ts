@@ -244,7 +244,9 @@ export function createReferenceApi(options: ReferenceApiOptions = {}): Reference
         const values = (body ?? {}) as Record<string, unknown>
         if (typeof values['title'] !== 'string' && resource.path === 'posts')
           return problem(422, 'validation_failed', 'Invalid', {
-            issues: [{ path: ['title'], code: 'required', message: 'Title is required.' }],
+            issues: [
+              { path: ['title'], field: 'title', code: 'required', message: 'Title is required.' },
+            ],
           })
         const row: Row = { ...values, id: String(rows.length + 1) }
         rows.push(row)
@@ -328,7 +330,9 @@ function list(resource: ResourceDescriptor, rows: Row[], params: URLSearchParams
   const max = (resource as ResourceDescriptor & { maxPerPage?: number }).maxPerPage ?? 100
   if (size > max)
     return problem(422, 'validation_failed', 'Invalid', {
-      issues: [{ path: ['page', 'size'], code: 'too_big', message: `At most ${max}.` }],
+      issues: [
+        { path: ['page', 'size'], field: 'page.size', code: 'too_big', message: `At most ${max}.` },
+      ],
     })
   const number = Number(params.get('page[number]') ?? 1)
   const pageRows = out.slice((number - 1) * size, number * size)

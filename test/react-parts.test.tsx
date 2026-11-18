@@ -347,16 +347,16 @@ describe('pure helpers of the components', () => {
       'lines[1].amount',
     ])
     expect(orderedFieldNames(lines, { lines: 'x' })).toEqual(['notes', 'lines'])
-    expect(keepIdempotencyKey({ type: 't', title: 't', status: 0, code: 'NETWORK_ERROR' })).toBe(
+    expect(keepIdempotencyKey({ type: 't', title: 't', status: 0, code: 'network_error' })).toBe(
       true,
     )
-    expect(keepIdempotencyKey({ type: 't', title: 't', status: 502, code: 'INTERNAL_ERROR' })).toBe(
+    expect(keepIdempotencyKey({ type: 't', title: 't', status: 502, code: 'internal_error' })).toBe(
       true,
     )
-    expect(keepIdempotencyKey({ type: 't', title: 't', status: 429, code: 'RATE_LIMITED' })).toBe(
+    expect(keepIdempotencyKey({ type: 't', title: 't', status: 429, code: 'rate_limited' })).toBe(
       true,
     )
-    expect(keepIdempotencyKey({ type: 't', title: 't', status: 409, code: 'CONFLICT' })).toBe(false)
+    expect(keepIdempotencyKey({ type: 't', title: 't', status: 409, code: 'conflict' })).toBe(false)
   })
 
   test('relation helpers and list columns', () => {

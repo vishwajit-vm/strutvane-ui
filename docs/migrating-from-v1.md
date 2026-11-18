@@ -52,7 +52,9 @@ Removed: `APP_STYLES`, `StrutvaneApp` `styles`.
 | `ResourceList` / `ResourceDetail` `confirmDelete` | `deletable` (built-in dialog) |
 | `ResourceApi` | adds optional `restore(path, key)` |
 | `ui.list.showing` for counts | also `ui.list.showingRange`, `…RangeCapped`, `…RangeOpen` |
-| `ui.problem.code.VALIDATION_FAILED` … | `ui.problem.code.validation_failed` … (codes match in any case, so your overrides still apply) |
+| `ui.problem.code.VALIDATION_FAILED` … | `ui.problem.code.validation_failed` …: every code is lowercase `snake_case` from framework 0.2 (decision #123), so rename your catalogue overrides to the lowercase code. An app's own uppercase code (still accepted by the framework until 0.3) finds a lowercase key too |
+| `problem.code === 'NOT_FOUND'`, `'NETWORK_ERROR'`, `'INTERNAL_ERROR'` | `'not_found'`, `NETWORK_ERROR_CODE` (`'network_error'`), `INTERNAL_ERROR_CODE` (`'internal_error'`); the framework's full rename table is `LEGACY_ERROR_CODES` in `@strutvane/framework/core` |
+| `ValidationIssue` `{ path, code, message }` | also `field`, the dotted path (`'lines.2.amount'`, decision #69). Every issue the UI parses or builds has it, rebuilt from `path`; `pathToField()` / `fieldToPath()` convert |
 
 New: `@strutvane/ui/design` (the contract), `@strutvane/ui/design/plain`, `@strutvane/ui/testing`
 (the conformance kit); in `@strutvane/ui/react`: `PageHeading`, `ModalDialog`, `CommandPalette`,

@@ -19,7 +19,7 @@ const valid = {
   type: 'about:blank',
   title: 'Validation failed',
   status: 422,
-  code: 'VALIDATION_FAILED',
+  code: 'validation_failed',
 }
 
 const response = (body: string, status: number, statusText = '') =>
@@ -59,7 +59,13 @@ describe('sanitizeProblem', () => {
       detail: 'd',
       traceId: 't',
       issues: [
-        { path: ['lines', 1, 'amount'], code: 'too_small', message: 'm', params: { min: 0 } },
+        {
+          path: ['lines', 1, 'amount'],
+          field: 'lines.1.amount',
+          code: 'too_small',
+          message: 'm',
+          params: { min: 0 },
+        },
       ],
     })
   })
@@ -93,16 +99,16 @@ describe('problemFromResponse', () => {
   })
 
   test.each([
-    ['<html>502 Bad Gateway</html>', 502, 'INTERNAL_ERROR', 502],
-    ['', 401, 'UNAUTHENTICATED', 401],
-    ['{"error":"x"}', 403, 'FORBIDDEN', 403],
-    ['null', 404, 'NOT_FOUND', 404],
-    ['[]', 409, 'CONFLICT', 409],
-    ['{', 413, 'PAYLOAD_TOO_LARGE', 413],
-    ['', 429, 'RATE_LIMITED', 429],
-    ['', 503, 'SERVICE_UNAVAILABLE', 503],
-    ['', 418, 'INTERNAL_ERROR', 418],
-    ['', 400, 'VALIDATION_FAILED', 400],
+    ['<html>502 Bad Gateway</html>', 502, 'internal_error', 502],
+    ['', 401, 'unauthenticated', 401],
+    ['{"error":"x"}', 403, 'forbidden', 403],
+    ['null', 404, 'not_found', 404],
+    ['[]', 409, 'conflict', 409],
+    ['{', 413, 'payload_too_large', 413],
+    ['', 429, 'rate_limited', 429],
+    ['', 503, 'service_unavailable', 503],
+    ['', 418, 'internal_error', 418],
+    ['', 400, 'validation_failed', 400],
   ])('%j with %i → %s', async (body, status, code, expectedStatus) => {
     const p = await problemFromResponse(response(body, status, 'Status Text'))
     expect(p).toMatchObject({ code, status: expectedStatus, title: 'Status Text' })
@@ -118,7 +124,7 @@ describe('problemFromResponse', () => {
       { status: 500 },
     )
     expect(await problemFromResponse(broken)).toMatchObject({
-      code: 'INTERNAL_ERROR',
+      code: 'internal_error',
       title: 'Request failed',
     })
   })
@@ -140,19 +146,19 @@ describe('problemBannerText', () => {
         type: 't',
         title: 'Internal',
         status: 500,
-        code: 'INTERNAL_ERROR',
+        code: 'internal_error',
         detail: 'NullPointer at db.ts:42',
         traceId: 'abc',
       }),
     ).toBe('Something went wrong on our side. Your changes are kept. Reference: abc.')
-    expect(banner({ type: 't', title: 'Internal', status: 500, code: 'INTERNAL_ERROR' })).toBe(
+    expect(banner({ type: 't', title: 'Internal', status: 500, code: 'internal_error' })).toBe(
       'Something went wrong on our side. Your changes are kept.',
     )
   })
 
   test('503, offline, 4xx detail, 4xx catalog by code, title fallback', () => {
     expect(
-      banner({ type: 't', title: 'x', status: 503, code: 'SERVICE_UNAVAILABLE', traceId: 'r' }),
+      banner({ type: 't', title: 'x', status: 503, code: 'service_unavailable', traceId: 'r' }),
     ).toBe(
       'The service is temporarily unavailable. Your changes are kept; please try again shortly. Reference: r.',
     )
@@ -162,14 +168,14 @@ describe('problemBannerText', () => {
         type: 't',
         title: 'Conflict',
         status: 409,
-        code: 'CONFLICT',
+        code: 'conflict',
         detail: 'Already paid.',
       }),
     ).toBe('Already paid.')
-    expect(banner({ type: 't', title: 'Forbidden', status: 403, code: 'FORBIDDEN' })).toBe(
+    expect(banner({ type: 't', title: 'Forbidden', status: 403, code: 'forbidden' })).toBe(
       'You do not have permission to do this.',
     )
-    expect(banner({ type: 't', title: 'Teapot', status: 418, code: 'TEAPOT' })).toBe('Teapot')
+    expect(banner({ type: 't', title: 'Teapot', status: 418, code: 'teapot' })).toBe('Teapot')
     expect(banner({ type: 't', title: 'Weird', status: 302, code: 'X', detail: 'internal' })).toBe(
       'Something went wrong on our side. Your changes are kept.',
     )
@@ -178,10 +184,10 @@ describe('problemBannerText', () => {
   test('the locale and catalog overrides apply', () => {
     expect(
       problemBannerText(
-        { type: 't', title: 'x', status: 404, code: 'NOT_FOUND' },
+        { type: 't', title: 'x', status: 404, code: 'not_found' },
         {
           ...defaultMessages,
-          'ui.problem.code.NOT_FOUND': 'Gone.',
+          'ui.problem.code.not_found': 'Gone.',
         },
       ),
     ).toBe('Gone.')

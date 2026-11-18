@@ -150,17 +150,38 @@ describe('server errors (422) land on the right fields', () => {
     await user.type(descriptions[0] as HTMLElement, 'Consulting')
     await user.type(descriptions[1] as HTMLElement, 'Travel')
     api.failNext({
-      ...problem(422, 'VALIDATION_FAILED', 'Validation failed'),
+      ...problem(422, 'validation_failed', 'Validation failed'),
       issues: [
         {
           path: ['lines', 1, 'amount'],
+          field: 'lines.1.amount',
           code: 'too_small',
           message: 'Line amount must be at least 0.',
         },
-        { path: ['lines', 9, 'amount'], code: 'too_small', message: 'Line 10 is invalid.' },
-        { path: [], code: 'BUDGET_EXCEEDED', message: 'This invoice exceeds the customer budget.' },
-        { path: [], code: 'BUDGET_EXCEEDED', message: 'This invoice exceeds the customer budget.' },
-        { path: ['internalOnly'], code: 'x', message: 'Something about a field you cannot see.' },
+        {
+          path: ['lines', 9, 'amount'],
+          field: 'lines.9.amount',
+          code: 'too_small',
+          message: 'Line 10 is invalid.',
+        },
+        {
+          path: [],
+          field: '',
+          code: 'budget_exceeded',
+          message: 'This invoice exceeds the customer budget.',
+        },
+        {
+          path: [],
+          field: '',
+          code: 'budget_exceeded',
+          message: 'This invoice exceeds the customer budget.',
+        },
+        {
+          path: ['internalOnly'],
+          field: 'internalOnly',
+          code: 'x',
+          message: 'Something about a field you cannot see.',
+        },
       ],
     })
     await submit(user)
@@ -181,8 +202,8 @@ describe('server errors (422) land on the right fields', () => {
     const { user } = await renderCreate(api)
     await fillValid(user)
     api.failNext({
-      ...problem(422, 'VALIDATION_FAILED', 'Validation failed'),
-      issues: [{ path: [], code: 'BUDGET_EXCEEDED', message: 'Over budget.' }],
+      ...problem(422, 'validation_failed', 'Validation failed'),
+      issues: [{ path: [], field: '', code: 'budget_exceeded', message: 'Over budget.' }],
     })
     await submit(user)
     const banner = await screen.findByRole('alert')
@@ -205,8 +226,8 @@ describe('server errors (422) land on the right fields', () => {
     const { user } = await renderCreate(api)
     await fillValid(user)
     api.failNext({
-      ...problem(422, 'VALIDATION_FAILED', 'Validation failed'),
-      issues: [{ path: ['number'], code: 'x', message: 'Try again.' }],
+      ...problem(422, 'validation_failed', 'Validation failed'),
+      issues: [{ path: ['number'], field: 'number', code: 'x', message: 'Try again.' }],
     })
     await submit(user)
     await screen.findByText('Try again.')
@@ -240,7 +261,7 @@ describe('non-validation problems', () => {
     const { user } = await renderCreate(api)
     await fillValid(user)
     api.failNext({
-      ...problem(500, 'INTERNAL_ERROR', 'Internal error', 'TypeError at db.ts:42'),
+      ...problem(500, 'internal_error', 'Internal error', 'TypeError at db.ts:42'),
       traceId: 'trace-9',
     })
     await submit(user)
@@ -259,7 +280,7 @@ describe('non-validation problems', () => {
       type: 'about:blank',
       title: 'Unauthorized',
       status: 401,
-      code: 'UNAUTHENTICATED',
+      code: 'unauthenticated',
     })
     await submit(user)
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -302,7 +323,7 @@ describe('non-validation problems', () => {
     const api = freshApi()
     const { user } = await renderCreate(api)
     await fillValid(user)
-    api.failNext(problem(409, 'CONFLICT', 'Conflict', 'Nope.'))
+    api.failNext(problem(409, 'conflict', 'Conflict', 'Nope.'))
     await submit(user)
     await screen.findByRole('alert')
     await submit(user)
@@ -444,10 +465,15 @@ describe('accessibility', () => {
     await user.click(screen.getByRole('button', { name: 'Add line items' }))
     await user.type(screen.getByLabelText(/^Description/), 'X')
     api.failNext({
-      ...problem(422, 'VALIDATION_FAILED', 'Validation failed'),
+      ...problem(422, 'validation_failed', 'Validation failed'),
       issues: [
-        { path: ['lines', 0, 'amount'], code: 'too_small', message: 'Too small.' },
-        { path: [], code: 'X', message: 'Form-level.' },
+        {
+          path: ['lines', 0, 'amount'],
+          field: 'lines.0.amount',
+          code: 'too_small',
+          message: 'Too small.',
+        },
+        { path: [], field: '', code: 'X', message: 'Form-level.' },
       ],
     })
     await submit(user)
@@ -485,7 +511,7 @@ describe('double submit', () => {
 
   test('after the first submit settles, the form can be submitted again (e.g. after an error)', async () => {
     const api = seededApi()
-    api.failNext(problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'))
+    api.failNext(problem(503, 'service_unavailable', 'Unavailable'))
     renderWithUI(<ResourceForm resource={customerResource} />, { api })
     const name = await screen.findByLabelText(/Name/)
     fireEvent.change(name, { target: { value: 'Umbrella' } })

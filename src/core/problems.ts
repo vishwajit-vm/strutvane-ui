@@ -7,8 +7,11 @@
  *
  * - a valid problem body is kept, with malformed `issues` entries dropped (never crash on them);
  * - anything else becomes a synthetic problem whose `code` is derived from the HTTP status
- *   (401 → `UNAUTHENTICATED`, 404 → `NOT_FOUND`, … and `INTERNAL_ERROR` for everything unknown);
- * - a transport failure (offline, DNS, CORS) becomes status `0` with code `NETWORK_ERROR`.
+ *   (401 → `unauthenticated`, 404 → `not_found`, … and `internal_error` for everything unknown);
+ * - a transport failure (offline, DNS, CORS) becomes status `0` with code `network_error`.
+ *
+ * Every code is lowercase `snake_case`, as the framework sends them from 0.2 on (CONSISTENCY #68,
+ * #123; RFC-0003). Every issue carries both `path` and the dotted `field` (#69).
  *
  * Only `detail` / `title` from the server are ever shown to users, and 5xx details never are: the
  * banner text comes from the message catalog (RFC-0003: "never raw internals").
@@ -19,7 +22,14 @@ import type { IssueParam, Problem, ValidationIssue } from '@strutvane/framework/
 import { formatMessage, type MessageCatalog } from './messages.ts'
 
 /** Code used for transport failures (no HTTP response at all). UI-only; never sent by servers. */
-export const NETWORK_ERROR_CODE = 'NETWORK_ERROR'
+export const NETWORK_ERROR_CODE = 'network_error'
+
+/**
+ * Code for a failure whose cause the UI cannot name: a 5xx or unknown status without a problem
+ * body, or a 2xx whose body has the wrong shape (RFC-0003 §4 rows 13 and 16). The framework's own
+ * code for the same situation.
+ */
+export const INTERNAL_ERROR_CODE = 'internal_error'
 
 /** Thrown by the HTTP client when a request fails. Always carries a well-formed Problem. */
 export class ApiProblemError extends Error {
@@ -54,7 +64,7 @@ function isIssueParam(value: unknown): value is IssueParam {
 }
 
 /**
- * The dotted `field` convenience of an issue (`"items.0.title"`, decision #69) as a path: numeric
+ * The dotted `field` member of an issue (`"items.0.title"`, decision #69) as a path: numeric
  * segments become array indexes. Used only when an issue has no usable `path` (decision #118).
  * `undefined` when the text has an empty segment (`"a..b"`), so a malformed field is dropped.
  *
@@ -71,6 +81,17 @@ export function fieldToPath(field: string): (string | number)[] | undefined {
   return out
 }
 
+/**
+ * The dotted `field` member for a path, exactly as the framework builds it (decision #69):
+ * `['lines', 2, 'amount']` → `'lines.2.amount'`, `[]` → `''` (the whole form).
+ *
+ * @example
+ * pathToField(['items', 0, 'title']) // 'items.0.title'
+ */
+export function pathToField(path: readonly (string | number)[]): string {
+  return path.join('.')
+}
+
 /** A clean copy of an issue path, or `undefined` when any segment is malformed. */
 function cleanSegments(path: readonly unknown[]): (string | number)[] | undefined {
   const cleanPath: (string | number)[] = []
@@ -84,9 +105,18 @@ function cleanSegments(path: readonly unknown[]): (string | number)[] | undefine
 }
 
 /**
- * A validated issue, or `undefined` if the entry is malformed. The location comes from `path`
- * first and falls back to the dotted `field` string (decision #118), so a server that sends only
- * one of them still lands its message on the right field.
+ * A validated issue, or `undefined` if the entry is malformed.
+ *
+ * The location comes from `path` first and falls back to the dotted `field` (decision #118):
+ * `path` is the framework's source of truth, because `field` is ambiguous for a key that contains
+ * a dot or looks like a number (`{ "a.b": … }`, `{ "1": … }`). The `field` member of the result is
+ * always present (required since framework 0.2, #69) and always agrees with `path`: it is rebuilt
+ * from the clean path, so a server whose two members disagree cannot place a message on one field
+ * and report it under another.
+ *
+ * Why keep the fallback both ways: a 0.2 server always sends both members, but the UI also talks to
+ * other backends through the same parser (an app's own endpoints, `@strutvane/auth`, proxies), and
+ * an issue that names its field in only one of the two ways is still placed, never dropped.
  */
 function sanitizeIssue(value: unknown): ValidationIssue | undefined {
   if (!isRecord(value)) return undefined
@@ -102,7 +132,7 @@ function sanitizeIssue(value: unknown): ValidationIssue | undefined {
   if (isRecord(params)) {
     for (const [k, v] of Object.entries(params)) if (isIssueParam(v)) cleanParams[k] = v
   }
-  return { path: cleanPath, code, message, params: cleanParams }
+  return { path: cleanPath, field: pathToField(cleanPath), code, message, params: cleanParams }
 }
 
 /** Structural check for an RFC 9457 problem body with a Strutvane `code`. */
@@ -140,22 +170,26 @@ export function sanitizeProblem(value: unknown): Problem | undefined {
   }
 }
 
+/**
+ * The code a bodiless response gets, by status: the framework's code for the same status, so the
+ * catalogue and every check treat it exactly like a real problem (#30 for 419, #123 for the case).
+ */
 const STATUS_CODES: ReadonlyMap<number, string> = new Map([
-  [400, 'VALIDATION_FAILED'],
-  [401, 'UNAUTHENTICATED'],
-  [403, 'FORBIDDEN'],
-  [404, 'NOT_FOUND'],
-  [409, 'CONFLICT'],
-  [413, 'PAYLOAD_TOO_LARGE'],
+  [400, 'validation_failed'],
+  [401, 'unauthenticated'],
+  [403, 'forbidden'],
+  [404, 'not_found'],
+  [409, 'conflict'],
+  [413, 'payload_too_large'],
   [419, 'csrf_token_mismatch'],
-  [422, 'VALIDATION_FAILED'],
-  [429, 'RATE_LIMITED'],
-  [503, 'SERVICE_UNAVAILABLE'],
+  [422, 'validation_failed'],
+  [429, 'rate_limited'],
+  [503, 'service_unavailable'],
 ])
 
 /** A synthetic problem for a response that did not carry a valid problem body. */
 export function syntheticProblem(status: number, title?: string): Problem {
-  const code = STATUS_CODES.get(status) ?? 'INTERNAL_ERROR'
+  const code = STATUS_CODES.get(status) ?? INTERNAL_ERROR_CODE
   return {
     type: 'about:blank',
     title: title && title.length <= 200 ? title : 'Request failed',
@@ -198,7 +232,7 @@ export function problemIssues(problem: Problem): readonly ValidationIssue[] {
  * - other 5xx and malformed responses → the catalog's server message plus the trace reference,
  *   never the server's raw `detail` (row 13: "full details in logs only");
  * - 4xx → the server's `detail` (rendered from ITS catalog), else the catalog message for the
- *   code (`ui.problem.code.<CODE>`), else the title.
+ *   code (`ui.problem.code.<code>`), else the title.
  */
 export function problemBannerText(
   problem: Problem,
@@ -210,14 +244,14 @@ export function problemBannerText(
   const withReference = (text: string) =>
     problem.traceId ? `${text} ${msg('ui.problem.reference', { traceId: problem.traceId })}` : text
   if (problem.code === NETWORK_ERROR_CODE) return msg('ui.problem.network')
-  if (problem.status === 503 || problem.code === 'SERVICE_UNAVAILABLE') {
+  if (problem.status === 503 || problem.code === 'service_unavailable') {
     return withReference(msg('ui.problem.unavailable'))
   }
   if (problem.status >= 500 || problem.status < 400) return withReference(msg('ui.problem.server'))
   const key = catalogKey(catalog, problem.code)
   // A few codes always use the catalogue: the server's detail is generic, while the catalogue says
   // what happened and what to do (decision #103 for `write_cancelled`, #30 for a refused CSRF check).
-  if (key !== undefined && CATALOGUE_FIRST.has(problem.code.toLowerCase())) return msg(key)
+  if (key !== undefined && CATALOGUE_FIRST.has(problem.code)) return msg(key)
   if (problem.detail) return problem.detail
   return key !== undefined ? msg(key) : problem.title
 }
@@ -226,12 +260,17 @@ export function problemBannerText(
 const CATALOGUE_FIRST: ReadonlySet<string> = new Set(['write_cancelled', 'csrf_token_mismatch'])
 
 /**
- * The catalogue key for a problem code (`ui.problem.code.<code>`), or `undefined`. Codes match
- * without regard to case: the ecosystem is moving from `SCREAMING_SNAKE_CASE` to lowercase
- * `snake_case` (decision #68), and the UI reads both while servers migrate.
+ * The catalogue key for a problem code (`ui.problem.code.<code>`), or `undefined`.
+ *
+ * Every Strutvane code is lowercase `snake_case` (decisions #68, #123), and so is every key in the
+ * default catalogue. The code is tried as sent, then lowercased, for one reason: during the 0.2 line
+ * the framework still accepts an **app's own** uppercase code (`INVOICE_ALREADY_PAID`, with a
+ * deprecation warning; framework `legacy-codes.ts`) and sends it unchanged, so an app that already
+ * moved its catalogue entry to `ui.problem.code.invoice_already_paid` still gets its message. The
+ * lowercase retry can go when the framework stops accepting uppercase codes (0.3).
  *
  * @example
- * catalogKey(defaultMessages, 'WRITE_CANCELLED') // 'ui.problem.code.write_cancelled'
+ * catalogKey(defaultMessages, 'write_cancelled') // 'ui.problem.code.write_cancelled'
  */
 export function catalogKey(catalog: MessageCatalog, code: string): string | undefined {
   for (const candidate of [code, code.toLowerCase()]) {

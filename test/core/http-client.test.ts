@@ -168,14 +168,16 @@ describe('failures never crash and always carry a Problem', () => {
       type: 't',
       title: 'Invalid',
       status: 422,
-      code: 'VALIDATION_FAILED',
+      code: 'validation_failed',
       issues: [{ path: ['a'], code: 'x', message: 'm' }, 'junk'],
     }
     const { fetch } = stub(Response.json(body, { status: 422 }))
     const problem = await catchProblem(
       createHttpClient({ baseUrl: 'https://api.test', fetch }).create('a', {}),
     )
-    expect(problem.issues).toEqual([{ path: ['a'], code: 'x', message: 'm', params: {} }])
+    expect(problem.issues).toEqual([
+      { path: ['a'], field: 'a', code: 'x', message: 'm', params: {} },
+    ])
   })
 
   test('an HTML error page maps by status', async () => {
@@ -183,7 +185,7 @@ describe('failures never crash and always carry a Problem', () => {
     const problem = await catchProblem(
       createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 }).get('a', '1'),
     )
-    expect(problem).toMatchObject({ status: 502, code: 'INTERNAL_ERROR' })
+    expect(problem).toMatchObject({ status: 502, code: 'internal_error' })
   })
 
   test.each([
@@ -193,11 +195,11 @@ describe('failures never crash and always carry a Problem', () => {
     ['record without id', () => Response.json({ name: 'x' })],
     ['empty body for a record', () => new Response('')],
     ['array instead of record', () => Response.json([{ id: 'a' }])],
-  ])('2xx with an unexpected shape (%s) → INTERNAL_ERROR', async (name, make) => {
+  ])('2xx with an unexpected shape (%s) → internal_error', async (name, make) => {
     const { fetch } = stub(make())
     const api = createHttpClient({ baseUrl: 'https://api.test', fetch })
     const call = name.startsWith('list') ? api.list('a', {}) : api.get('a', '1')
-    expect(await catchProblem(call)).toMatchObject({ status: 500, code: 'INTERNAL_ERROR' })
+    expect(await catchProblem(call)).toMatchObject({ status: 500, code: 'internal_error' })
   })
 
   test('page info is normalised: hasMore without a cursor is the last page; bad numbers dropped', async () => {
@@ -227,18 +229,18 @@ describe('failures never crash and always carry a Problem', () => {
     expect((await api.list('a', {})).meta.page).toEqual({ size: 0, hasMore: false })
   })
 
-  test('network failure → status 0 NETWORK_ERROR with the cause', async () => {
+  test('network failure → status 0 network_error with the cause', async () => {
     const cause = new TypeError('Failed to fetch')
     const { fetch } = stub(cause)
     const e = await createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 })
       .get('a', '1')
       .catch((err: unknown) => err)
     expect(e).toBeInstanceOf(ApiProblemError)
-    expect((e as ApiProblemError).problem).toMatchObject({ status: 0, code: 'NETWORK_ERROR' })
+    expect((e as ApiProblemError).problem).toMatchObject({ status: 0, code: 'network_error' })
     expect((e as ApiProblemError).cause).toBe(cause)
   })
 
-  test('a body that fails mid-stream → NETWORK_ERROR', async () => {
+  test('a body that fails mid-stream → network_error', async () => {
     const broken = () =>
       new Response(new ReadableStream({ start: (c) => c.error(new Error('reset')) }), {
         status: 200,
@@ -249,7 +251,7 @@ describe('failures never crash and always carry a Problem', () => {
         createHttpClient({ baseUrl: 'https://api.test', fetch, readRetries: 0 }).get('a', '1'),
       ),
     ).toMatchObject({
-      code: 'NETWORK_ERROR',
+      code: 'network_error',
     })
   })
 

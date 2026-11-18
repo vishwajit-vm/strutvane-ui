@@ -1,0 +1,38 @@
+# NEXT: ui v2 (`v2/behaviour`), 2026-11-18
+
+## Done (this commit): the framework 0.2 error model
+- Peer and dev dependency `@strutvane/framework` `^0.2.0-next.0` / `0.2.0-next.0` (CONSISTENCY #128).
+  The one-kernel patch (`release/0.2/patches/ui/0001-…`) was already applied in 5473ccf.
+- Every code the UI produces or compares is lowercase `snake_case` (#123): synthetic problems by
+  status (401 `unauthenticated`, 403 `forbidden`, 404 `not_found`, 409 `conflict`, 413, 419
+  `csrf_token_mismatch`, 422 `validation_failed`, 429 `rate_limited`, 503 `service_unavailable`,
+  else `internal_error`), `NETWORK_ERROR_CODE` = `'network_error'`, new `INTERNAL_ERROR_CODE`.
+  Catalogue keys are lowercase; `catalogKey` still retries the lowercased code only because the
+  framework accepts an app's own uppercase code until 0.3 (drop the retry in 0.3).
+- Every issue carries `field` (#69): parsed issues are placed by `path` first, then `field` (#118,
+  and the framework's own TSDoc: `path` is the source of truth), and `field` is rebuilt from the
+  winning path. Client validation and the reference API send `field` too. New `pathToField()`.
+- `test/error-codes.test.ts`: TypeScript-parser scan of `src/` string literals fails on any uppercase
+  code (pattern + the framework's `LEGACY_ERROR_CODES`) or uppercase `ui.problem.code.*` key;
+  every synthetic code is checked against framework 0.2 `PROBLEM_CODES`.
+- Docs: README, `docs/migrating-from-v1.md`, CLAUDE.md; changeset `lowercase-error-codes.md`
+  (minor). Hub RFC-0003 amended in the hub repo.
+
+## How it was verified
+- Against framework `main` 6dfc239 (0.2.0-next.0, not on npm): built and `npm pack`ed in a
+  scratchpad worktree, then `npm ci` is impossible (see below), so the dependencies came from the
+  committed lockfile plus `npm install --no-save --ignore-scripts <tarball>`. `package.json` and
+  `package-lock.json` were not changed by it.
+- `npm run ci` 3× in a row green (Windows, Node 24.21): 496 tests, coverage
+  97.06/92.9/96.42/98.4; `check-code-rules.mjs`, `check-package.mjs` (41 files), publint --strict,
+  attw esm-only, `npm audit --omit=dev` 0 (see `RELEASE-READINESS.md` R1, R2, R5). Two earlier
+  attempts failed only on Vitest worker-start timeouts while the machine sat at 100% CPU from other
+  jobs; nothing changed before the green 3×.
+
+## Next
+1. **After `@strutvane/framework` 0.2.0-next.0 is on npm:** `npm install` to add the framework to
+   `package-lock.json` (it has no framework entry today, so `npm ci` fails with ETARGET), commit
+   the lockfile, then `npm ci && npm run ci`.
+2. `changeset version` with the core train (pre mode `next`; this changeset is `minor`), when the
+   coordinator versions the train.
+3. R3: written threat model and a `security-reviewer` pass. R6: installer e2e.

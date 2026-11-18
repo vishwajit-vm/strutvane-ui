@@ -18,6 +18,7 @@ import type {
   ValidationIssue,
 } from '@strutvane/framework/contracts'
 import { formatMessage, type MessageCatalog } from './messages.ts'
+import { pathToField } from './problems.ts'
 
 /** Field types whose values are numbers. */
 export const NUMERIC_TYPES: ReadonlySet<string> = new Set([
@@ -96,7 +97,8 @@ function compilePattern(pattern: unknown): RegExp | undefined {
 }
 
 /**
- * Validate one scalar field value. Returns zero or more issues with `path: [field.name]`.
+ * Validate one scalar field value. Returns zero or more issues with `path: [field.name]` and the
+ * same location as `field` (the shape a 0.2 server sends, decision #69).
  * Array items are validated by {@link validateArrayItems}.
  */
 export function validateField(
@@ -107,6 +109,7 @@ export function validateField(
 ): ValidationIssue[] {
   const issue = (code: string, params: Record<string, IssueParam> = {}): ValidationIssue => ({
     path: [field.name],
+    field: pathToField([field.name]),
     code,
     params,
     message: formatMessage(catalog, code, { attribute: field.label, ...params }, locale),
@@ -223,7 +226,8 @@ export function validateArrayItems(
     for (const [prop, sub] of Object.entries(properties)) {
       const subField = itemFieldDescriptor(field, prop, sub)
       for (const i of validateField(subField, row[prop], catalog, locale)) {
-        issues.push({ ...i, path: [field.name, index, prop] })
+        const path = [field.name, index, prop]
+        issues.push({ ...i, path, field: pathToField(path) })
       }
     }
   })

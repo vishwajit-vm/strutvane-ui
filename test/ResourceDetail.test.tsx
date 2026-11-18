@@ -59,7 +59,7 @@ describe('<ResourceDetail> delete', () => {
 
   test('a retry after an unknown outcome reuses the idempotency key', async () => {
     const api = seededApi()
-    api.failNext(problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'))
+    api.failNext(problem(503, 'service_unavailable', 'Unavailable'))
     renderWithUI(<ResourceDetail resource={customerResource} recordId="c1" deletable />, { api })
     const user = userEvent.setup()
     await confirmPermanentDelete(user)
@@ -121,7 +121,7 @@ describe('<ResourceDetail> page', () => {
     vi.spyOn(api, 'get').mockRejectedValue(
       Object.assign(new Error('x'), {
         name: 'ApiProblemError',
-        problem: problem(401, 'UNAUTHENTICATED', 'Sign in'),
+        problem: problem(401, 'unauthenticated', 'Sign in'),
       }),
     )
     const { StrutvaneProvider } = await import('../src/react/StrutvaneProvider.tsx')

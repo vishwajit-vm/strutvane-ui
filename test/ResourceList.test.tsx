@@ -340,7 +340,7 @@ describe('capabilities and overrides', () => {
 
   test('a failed delete shows a banner and the retry reuses the same idempotency key', async () => {
     const { api, user } = await renderList({ deletable: true })
-    api.failNext({ ...problem(503, 'SERVICE_UNAVAILABLE', 'Unavailable'), traceId: 't-1' })
+    api.failNext({ ...problem(503, 'service_unavailable', 'Unavailable'), traceId: 't-1' })
     const remove = async () => {
       await user.click(screen.getByRole('button', { name: 'Delete INV-1000' }))
       const dialog = await screen.findByRole('alertdialog')
@@ -407,7 +407,7 @@ describe('error states', () => {
     const api = seededApi()
     vi.spyOn(api, 'list').mockRejectedValue(
       new (await import('../src/core/problems.ts')).ApiProblemError(
-        problem(403, 'FORBIDDEN', 'Forbidden'),
+        problem(403, 'forbidden', 'Forbidden'),
       ),
     )
     renderWithUI(<ResourceList resource={invoiceResource} />, { api })

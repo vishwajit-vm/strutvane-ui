@@ -303,7 +303,7 @@ describe('fetchManifest', () => {
     expect((err as ManifestError).errors.length).toBeGreaterThan(0)
   })
 
-  test('network failure is a NETWORK_ERROR problem; an abort is re-thrown as-is', async () => {
+  test('network failure is a network_error problem; an abort is re-thrown as-is', async () => {
     const offline = await fetchManifest({
       baseUrl: 'https://x',
       fetch: async () => {
@@ -311,7 +311,7 @@ describe('fetchManifest', () => {
       },
     }).catch((e: unknown) => e)
     expect(offline).toBeInstanceOf(ApiProblemError)
-    expect((offline as ApiProblemError).problem.code).toBe('NETWORK_ERROR')
+    expect((offline as ApiProblemError).problem.code).toBe('network_error')
     const controller = new AbortController()
     controller.abort()
     const abort = new DOMException('aborted', 'AbortError')

@@ -357,7 +357,7 @@ describe('problems v2', () => {
   })
 
   test('other 4xx keep the server detail first, then the catalogue, then the title', () => {
-    const base = { type: 'about:blank', title: 'Gone', status: 404, code: 'NOT_FOUND' }
+    const base = { type: 'about:blank', title: 'Gone', status: 404, code: 'not_found' }
     expect(problemBannerText({ ...base, detail: 'Server says' }, defaultMessages)).toBe(
       'Server says',
     )

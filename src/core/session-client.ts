@@ -10,7 +10,12 @@
  * @module
  */
 import type { Actor } from '@strutvane/framework/contracts'
-import { ApiProblemError, networkProblem, problemFromResponse } from './problems.ts'
+import {
+  ApiProblemError,
+  INTERNAL_ERROR_CODE,
+  networkProblem,
+  problemFromResponse,
+} from './problems.ts'
 import { type XsrfOptions, xsrfHeaders } from './xsrf.ts'
 
 /** The signed-in actor as the API reports it (`GET /auth/me`). */
@@ -59,7 +64,7 @@ function actorFrom(body: unknown): SessionActor {
       type: 'about:blank',
       title: 'Unexpected response',
       status: 500,
-      code: 'INTERNAL_ERROR',
+      code: INTERNAL_ERROR_CODE,
       detail: 'The session response has no actor.',
     })
   }

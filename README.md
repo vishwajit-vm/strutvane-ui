@@ -106,14 +106,14 @@ It checks every slot, WCAG AA contrast for every token pair in both themes (at e
 
 **Forms**
 - Widgets per field type (decimals keep what you typed; datetimes in your time zone; JSON as JSON; a searchable, paginated relation picker).
-- Client validation from the manifest; server 422 issues land on the right field (`path`, then `field`, decision #118).
+- Client validation from the manifest; server 422 issues land on the right field (`path`, then `field`, decision #118); every code is lowercase `snake_case`, as framework 0.2 sends them (#123).
 - The **unsaved-changes guard**: leaving a changed form (a link, Back, Escape, the browser's Back) asks first; reload and close use the browser's prompt.
 - One submission at a time; idempotency keys reused while the outcome is unknown.
 - A **401 keeps the draft** and opens "Sign in again" over the form.
 
 **Safety**
 - Writes send `X-XSRF-TOKEN` from the `XSRF-TOKEN` cookie (decision #17). Reads are retried twice on no answer or a 5xx; writes never are.
-- Problems are never shown raw: friendly catalogue messages, a trace reference for 5xx, a clear message for `write_cancelled` (#103). Codes match in any case (#68).
+- Problems are never shown raw: friendly catalogue messages, a trace reference for 5xx, a clear message for `write_cancelled` (#103). Codes are lowercase `snake_case` (#68, #123); catalogue keys use the lowercase code.
 - A crashing cell or widget is contained to itself (error boundaries).
 - Sign-out shows the sign-in screen only after the server confirmed it.
 

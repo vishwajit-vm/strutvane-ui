@@ -19,9 +19,14 @@ the conformance kit that Crisp, Vivid and community designs implement.
 
 - **v2 on branch `v2/behaviour` (0.2 line, `next`), not released.** v1 (`0.1.0-next.0`) is on npm.
 - Gates: hub `docs/19-production-readiness.md` (R1–R9); evidence in `RELEASE-READINESS.md`.
-- `@strutvane/framework` is a required peer (contracts at `@strutvane/framework/contracts`). Until
-  `0.1.0-next.1` is on npm, `package-lock.json` has no framework entry: run `npm install` after it
-  ships. Locally a dev copy of the contracts sits in `node_modules/@strutvane/framework`.
+- `@strutvane/framework` `^0.2.0-next.0` is a required peer (contracts at
+  `@strutvane/framework/contracts`). Until `0.2.0-next.0` is on npm, `package-lock.json` has no
+  framework entry and `npm ci` fails: test against a local `npm pack` of the framework with
+  `npm install --no-save --ignore-scripts <tarball>` (never commit it), and run `npm install` to
+  refresh the lockfile after it ships.
+- Error model = framework 0.2 (hub RFC-0003): codes are lowercase `snake_case` (#123,
+  `test/error-codes.test.ts` fails on an uppercase code literal in `src/`); every issue carries
+  `field`, placed by `path` first (#118).
 - Manifest fields `maxPerPage`, `routeKey`, `ui.order`, `ui.badge`: read when present, ignored
   otherwise (`docs/rfcs/0005-manifest-ui-fields.md`, proposed).
 
