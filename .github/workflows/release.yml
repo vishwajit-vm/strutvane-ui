@@ -10,7 +10,8 @@
 #      Then it runs the full quality gate again on the build it is about to stage, and STAGES the package's
 #      version ONLY if it's neither on npm nor already staged (idempotent). Every repo publishes
 #      exactly one package, from its root. The dist-tag comes from the version: x.y.z → latest,
-#      x.y.z-next.N → next, x.y.z-canary.N → canary.
+#      x.y.z-next.N → latest too (decision #131: before 1.0 every approved release is the default),
+#      x.y.z-canary.N → canary. `latest` never moves backwards.
 #   3. If npm answers 409 (the version already exists), that is a skip, not a failure, but only
 #      after the published tarball's integrity matches this build; a staged-only version is skipped
 #      and this build's integrity is printed for the approver to compare (hub docs/18 §8, security

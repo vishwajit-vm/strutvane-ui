@@ -111,14 +111,23 @@ Every generated line is owned, overridable code.
 - **Releases:** one package per repo, versioned on `main` with Changesets. CI **stages** each new version through npm trusted publishing (OIDC, provenance, no tokens), and a maintainer approves it on npmjs.com with 2FA (ADR-0016, ADR-0018). A 409 "version exists" is a skip only when the tarball matches CI's build. The release workflow only runs once the repo variable `RELEASE_ENABLED=true` is set. Blueprint §8 / proposed ADR-0020 move pre-1.0 releases to plain `0.x` on `latest` once accepted.
 - **Docker:** Strutvane's own repos **never commit Docker files** (ADR-0006). Generated apps keep the local `docker/compose.yaml` git-ignored by default, and **may commit** a secure production `Dockerfile` + `.dockerignore` and a `.devcontainer/`, only when the developer opts in (ADR-0021).
 
-## 7. Current status (2026-11-15)
+## 7. Current status: never trust this file for it
 
-**v2 redesign: Laravel's flow, in TypeScript** (hub `docs/18-v2-blueprint.md`). v1's Phase 0 (foundations, spikes 01–09, Gate 0 on 2026-11-14) is complete; the v2 phases below replace v1's Phase 1.
-- **Phase 0, consolidate: done on a branch.** contracts, core, devkit and cli are folded into `strutvane-framework` on branch `v2/consolidate`, with full history and npm; 1,288 tests pass + 14 skipped (the sum of the five old suites). **Not merged, not pushed.** It waits for the owner's review and for strutvane-tooling's npm CI (branch `v2/npm`). Still open: folding the logs pipeline into the framework (ADR-0022; the consolidation kept `@strutvane/logs` separate) and the ADR that supersedes ADR-0002/D17.
-- **Next: Phase 1, the full flow (0.2.0):** framework core (MVC, routing, validation, error page), ORM, migration-first schema, `node strut migrate` → API + UI + sidebar, auth, minimal mail, ui + design-crisp + design-vivid, the one-command installer, the package catalogue, log-viewer, versioned docs; Northwind Ops rebuilt as the acceptance test. v2 design evidence lives in hub spikes 10–20.
-- **Moving to npm repo by repo:** framework (on its branch) and tooling (on its branch) are converted; auth, ui, logs, files, create-strutvane and docs still use pnpm until their own migration PR.
-- **npm:** publishing is paused until 2026-11-17 08:35 UTC, and nothing is published until Phase 1 passes its acceptance test. `@strutvane/{framework,auth,ui,logs,contracts,core,cli,devkit}`, `strutvane` and `create-strutvane` hold placeholder or `0.1.0-next.0` versions *(unverified per name)*.
-- **Carried over:** domains, trademark clearance, social handles (owner).
+Status changes daily, and a stale copy in every repo is how people (and AI agents) end up working from wrong facts. So:
+
+- **The live, verified status is the hub's [`STATE.md`](https://github.com/vishwajit-vm/strutvane/blob/main/STATE.md)**: every repo and branch with its commit, the test results the coordinator re-ran itself, what's running, the open decisions and the next steps.
+- **The plan** (order, hours, dates) is hub `docs/21-delivery-plan.md`, and **every decision** is in hub `spikes/CONSISTENCY-2026-11-15.md` (numbered) and `docs/adr/`.
+- **This repo's own state:** `NEXT.md` (if present) on work branches, and `RELEASE-READINESS.md` for gates R1–R9.
+
+As of 2026-11-16 (snapshot only): framework v2 is on `main` (0.1.0-next.1); auth, ui and create-strutvane v2 sit on branches at 0.2.0-next.0, waiting for the framework to be published. The core train releases together as `0.2.0-next.N`.
+
+## 7a. Rules that keep everyone accurate (humans and AI alike)
+
+1. **Check, don't remember.** Before stating that something is merged, pushed, passing or decided, check it: `git log`, `git status`, the gate output, or the hub's `node scripts/state-check.mjs`, which fails on uncommitted or unpushed work and on commits `STATE.md` names that don't exist.
+2. **Verified vs reported.** A test count counts only once someone re-runs it. Until then it is marked *(agent-reported)*.
+3. **Write it down in the same change.** A decision goes in the decisions file or an ADR, status goes in `STATE.md`, and a branch's progress goes in its `NEXT.md`, in the same commit as the work.
+4. **Files win over memory.** If a conversation, summary or note disagrees with the repos, the repos are right; fix the note.
+5. **Never invent:** no made-up commit ids, test counts, versions, APIs or package names. If you don't know, say so and check.
 
 ## 8. Contributor quick start (human or AI)
 

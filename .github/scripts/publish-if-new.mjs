@@ -32,7 +32,12 @@ const SEMVER =
 
 /**
  * Decide the npm dist-tag for a version. Exported for tests.
- * `1.2.3` → `latest`; `0.1.0-next.4` → `next`; `0.1.0-canary.20261114` → `canary`.
+ * `1.2.3` → `latest`; `0.1.0-next.4` → `latest`; `0.1.0-canary.20261114` → `canary`.
+ *
+ * Why `next` goes to `latest`: the project lead decided (2026-11-19, consistency decision #131)
+ * that before 1.0 every approved release is the default, so `npm install <pkg>` and the npm page
+ * show the newest version. Other pre-release ids (`canary`, `rc`, …) keep their own tag, so an
+ * experiment never becomes the default by accident.
  * @param {string} version
  * @returns {string}
  */
@@ -45,7 +50,46 @@ export function distTagFor(version) {
   if (!/^[a-z][a-z0-9-]*$/.test(id) || id === 'latest') {
     throw new Error(`pre-release id "${id}" must be lowercase letters (e.g. next, canary)`)
   }
-  return id
+  return id === 'next' ? 'latest' : id
+}
+
+/**
+ * Compare two versions by semver precedence, pre-releases included. Exported for tests.
+ * `0.2.0-next.2` > `0.2.0-next.1` > `0.1.0`; `0.2.0` > `0.2.0-next.9`. Build metadata is ignored.
+ * @returns {number} negative if a < b, 0 if equal, positive if a > b
+ */
+export function comparePrecedence(/** @type {string} */ a, /** @type {string} */ b) {
+  const ma = SEMVER.exec(a)
+  const mb = SEMVER.exec(b)
+  if (!ma || !mb) throw new Error(`not a valid semver version: "${ma ? b : a}"`)
+  for (let i = 1; i <= 3; i++) {
+    const d = Number(ma[i]) - Number(mb[i])
+    if (d !== 0) return d
+  }
+  const pa = ma[4]
+  const pb = mb[4]
+  if (pa === undefined && pb === undefined) return 0
+  if (pa === undefined) return 1
+  if (pb === undefined) return -1
+  const xa = pa.split('.')
+  const xb = pb.split('.')
+  for (let i = 0; i < Math.max(xa.length, xb.length); i++) {
+    const ia = xa[i]
+    const ib = xb[i]
+    if (ia === undefined) return -1
+    if (ib === undefined) return 1
+    const na = /^\d+$/.test(ia)
+    const nb = /^\d+$/.test(ib)
+    if (na && nb) {
+      const d = Number(ia) - Number(ib)
+      if (d !== 0) return d
+    } else if (na !== nb) {
+      return na ? -1 : 1
+    } else if (ia !== ib) {
+      return ia < ib ? -1 : 1
+    }
+  }
+  return 0
 }
 
 /**
@@ -73,7 +117,9 @@ export function decide({ version, published, latest, staged = [] }) {
   if (staged.includes(version)) {
     return { action: 'skip', reason: `${version} is already staged and waiting for approval` }
   }
-  if (tag === 'latest' && latest && !latest.includes('-') && compareStable(version, latest) < 0) {
+  // Never move `latest` backwards (pre-releases included, since `next` releases now go there).
+  // The `0.0.0-reserved.N` placeholders that hold unreleased names are always lower.
+  if (tag === 'latest' && latest && comparePrecedence(version, latest) < 0) {
     throw new Error(`refusing to publish ${version} as latest: a higher latest (${latest}) exists`)
   }
   return { action: 'stage', tag }
