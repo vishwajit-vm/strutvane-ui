@@ -123,6 +123,44 @@ const app = (server: FakeServer, extra: Partial<Parameters<typeof StrutvaneApp>[
   render(<StrutvaneApp apiUrl="/api/v1" appName="Northwind" fetch={server.fetch} {...extra} />)
 
 describe('<StrutvaneApp>', () => {
+  it('UI-1: auth under the API base, the manifest at the origin; UI-2: tenancy={false} asks for no workspaces', async () => {
+    const server = fakeServer({ signedIn: true })
+    app(server, { tenancy: false })
+    await waitFor(() => expect(server.calls).toContain('GET /.well-known/strutvane.json'))
+    expect(server.calls).toContain('GET /api/v1/auth/me')
+    // Never under the API base, never the tenants endpoint of an app without teams.
+    expect(server.calls.filter((c) => c.includes('/api/v1/.well-known'))).toEqual([])
+    expect(server.calls.filter((c) => c.includes('/tenants'))).toEqual([])
+  })
+
+  it('UI-1: authUrl moves only the auth calls', async () => {
+    const server = fakeServer({ signedIn: true })
+    const seen: string[] = []
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input), 'http://app.test')
+      seen.push(url.host + url.pathname)
+      // Serve the moved auth endpoint as the fake server's own.
+      return server.fetch(
+        url.pathname.startsWith('/id/') ? url.pathname.replace('/id/', '/api/v1/auth/') : input,
+        init,
+      )
+    }
+    render(
+      <StrutvaneApp
+        apiUrl="/api/v1"
+        authUrl="/id"
+        appName="Northwind"
+        fetch={fetch}
+        tenancy={false}
+      />,
+    )
+    await waitFor(() =>
+      expect(seen.some((u) => u.endsWith('/.well-known/strutvane.json'))).toBe(true),
+    )
+    expect(seen.some((u) => u.endsWith('/id/me'))).toBe(true)
+    expect(seen.some((u) => u.includes('/api/v1/auth/'))).toBe(false)
+  })
+
   it('signs in (wrong password, then rate limit, then success) and auto-selects the only workspace', async () => {
     const server = fakeServer()
     const { container } = app(server)

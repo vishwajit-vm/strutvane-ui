@@ -3,7 +3,7 @@
  *
  * ```tsx
  * <DesignProvider design={crisp} theme="system" overrides={{ brandHue: 150 }} nonce={cspNonce}>
- *   <StrutvaneApp apiUrl="/api" />
+ *   <StrutvaneApp apiUrl="/api/v1" />
  * </DesignProvider>
  * ```
  *

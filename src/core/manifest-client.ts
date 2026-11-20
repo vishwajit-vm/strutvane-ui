@@ -284,8 +284,13 @@ export function parseManifest(value: unknown): ManifestParseResult {
 
 /** Options for {@link fetchManifest}. */
 export interface FetchManifestOptions {
-  /** Origin or base URL of the API server; the manifest path is resolved against it. */
-  readonly baseUrl: string
+  /**
+   * Origin or base URL of the API server; the manifest path (`/.well-known/strutvane.json`, at the
+   * root) is resolved against it. Ignored when `url` is given.
+   */
+  readonly baseUrl?: string
+  /** The manifest's full URL (see `resolveEndpoints`). One of `url` or `baseUrl` is required. */
+  readonly url?: string
   readonly fetch?: typeof globalThis.fetch
   readonly signal?: AbortSignal
   readonly credentials?: RequestCredentials
@@ -298,7 +303,12 @@ export interface FetchManifestOptions {
  */
 export async function fetchManifest(options: FetchManifestOptions): Promise<ResourceManifest> {
   const doFetch = options.fetch ?? globalThis.fetch
-  const url = new URL(MANIFEST_PATH, options.baseUrl)
+  if (options.url === undefined && options.baseUrl === undefined)
+    throw new TypeError('fetchManifest needs url or baseUrl (the API server).')
+  const url =
+    options.url !== undefined
+      ? new URL(options.url, options.baseUrl)
+      : new URL(MANIFEST_PATH, options.baseUrl)
   let response: Response
   try {
     response = await doFetch(url, {

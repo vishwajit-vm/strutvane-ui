@@ -5,9 +5,13 @@
  * import { StrutvaneApp } from '@strutvane/ui/react'
  * import { crisp } from '@strutvane/design-crisp'
  * export function App() {
- *   return <StrutvaneApp apiUrl="/api" appName="Acme" design={crisp} brand={{ brandHue: 150 }} />
+ *   return <StrutvaneApp apiUrl="/api/v1" appName="Acme" design={crisp} brand={{ brandHue: 150 }} />
  * }
  * ```
+ *
+ * One setting gives every URL (UI-1, see core/endpoints.ts): the API at `apiUrl` (`/api/v1`), auth
+ * at `{apiUrl}/auth`, and the manifest at the API's origin (`/.well-known/strutvane.json`), never
+ * under the API base. `authUrl` and `manifestUrl` override one of them.
  *
  * It provides, from the API alone (session endpoints + the resource manifest):
  * - a sign-in screen (`auth: false` turns it off for APIs without `@strutvane/auth`);
@@ -46,6 +50,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { resolveEndpoints } from '../core/endpoints.ts'
 import { createHttpClient } from '../core/http-client.ts'
 import { fetchManifest } from '../core/manifest-client.ts'
 import { formatMessage } from '../core/messages.ts'
@@ -87,8 +92,18 @@ import type { UiOverrides, UiRegistry } from './types.ts'
 
 /** Props of {@link StrutvaneApp}. */
 export interface StrutvaneAppProps {
-  /** API base URL, e.g. `/api` (`VITE_API_URL`). */
+  /** API base URL, e.g. `/api/v1` (`VITE_API_URL`). A relative `api/v1` is read from the site root. */
   readonly apiUrl: string
+  /** Where `@strutvane/auth` answers. Default: `{apiUrl}/auth`. */
+  readonly authUrl?: string
+  /** The resource manifest's URL. Default: `/.well-known/strutvane.json` at the API's origin. */
+  readonly manifestUrl?: string
+  /**
+   * Whether the API is multi-tenant (teams on). `false` never asks for workspaces, so an app
+   * without teams makes no `{auth}/tenants` call (UI-2). Default `true`: asked, and a 404 is
+   * treated as "no workspaces".
+   */
+  readonly tenancy?: boolean
   /** Shown in the sidebar, the title and the sign-in screen. */
   readonly appName?: string
   /** App screens; they win over resource routes. Routes with a `title` appear in the sidebar. */
@@ -161,16 +176,22 @@ function AppRoot(props: StrutvaneAppProps): ReactElement {
   const fetchFn = props.fetch
   const credentials = props.credentials ?? 'same-origin'
   const { headers, xsrf } = props
+  const { apiUrl, authUrl, manifestUrl } = props
+  const endpoints = useMemo(
+    () => resolveEndpoints({ apiUrl, authUrl, manifestUrl }),
+    [apiUrl, authUrl, manifestUrl],
+  )
   const session: SessionClient = useMemo(
     () =>
       createSessionClient({
-        apiUrl: props.apiUrl,
+        apiUrl: endpoints.api,
+        authUrl: endpoints.auth,
         credentials,
         ...(fetchFn ? { fetch: fetchFn } : {}),
         ...(headers ? { headers } : {}),
         ...(xsrf !== undefined ? { xsrf } : {}),
       }),
-    [props.apiUrl, credentials, fetchFn, headers, xsrf],
+    [endpoints, credentials, fetchFn, headers, xsrf],
   )
   const [state, setState] = useState<SessionState>(
     props.auth === false
@@ -326,7 +347,7 @@ function SignedIn(props: SignedInProps): ReactElement {
 
   const tenants = useQuery({
     queryKey: ['strutvane', 'session', 'tenants', actor.id],
-    enabled: auth,
+    enabled: auth && props.tenancy !== false,
     queryFn: ({ signal }) => session.tenants(signal).catch(() => [] as SessionTenant[]),
   })
   const [switching, setSwitching] = useState(false)
@@ -374,23 +395,27 @@ function SignedIn(props: SignedInProps): ReactElement {
     void switchTo(only.tenantId)
   }, [only, actor.tenantId, switching, switchTo])
 
-  const { headers, xsrf, fetch: fetchFn, credentials, apiUrl } = props
+  const { headers, xsrf, fetch: fetchFn, credentials, apiUrl, authUrl, manifestUrl } = props
+  const endpoints = useMemo(
+    () => resolveEndpoints({ apiUrl, authUrl, manifestUrl }),
+    [apiUrl, authUrl, manifestUrl],
+  )
   const api: ResourceApi = useMemo(
     () =>
       createHttpClient({
-        baseUrl: apiUrl,
+        baseUrl: endpoints.api,
         credentials,
         ...(fetchFn ? { fetch: fetchFn } : {}),
         ...(headers ? { headers } : {}),
         ...(xsrf !== undefined ? { xsrf } : {}),
       }),
-    [apiUrl, credentials, fetchFn, headers, xsrf],
+    [endpoints, credentials, fetchFn, headers, xsrf],
   )
   const manifest = useQuery({
     queryKey: ['strutvane', 'manifest', actor.id, actor.tenantId ?? ''],
     queryFn: ({ signal }) =>
       fetchManifest({
-        baseUrl: new URL(apiUrl, window.location.href).toString(),
+        url: endpoints.manifest,
         signal,
         credentials,
         ...(fetchFn ? { fetch: fetchFn } : {}),

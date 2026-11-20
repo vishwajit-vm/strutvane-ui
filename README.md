@@ -43,7 +43,7 @@ const routes: RouteDefinition[] = [{ path: '/reports', title: 'Reports', element
 export function App() {
   return (
     <StrutvaneApp
-      apiUrl="/api"
+      apiUrl="/api/v1"
       appName="Acme"
       design={crisp}                 // default: the plain design
       brand={{ brandHue: 150 }}      // the public override tokens
@@ -56,7 +56,9 @@ export function App() {
 
 | Prop | Default | |
 |---|---|---|
-| `apiUrl` | (required) | API base, e.g. `/api`; the manifest is read from the same origin |
+| `apiUrl` | (required) | API base, e.g. `/api/v1` (`VITE_API_URL`). Auth is called at `{apiUrl}/auth/*` and the manifest at the API's origin, `/.well-known/strutvane.json` (never under the API base). A relative `api/v1` is read from the site root |
+| `authUrl`, `manifestUrl` | `{apiUrl}/auth`, `{origin}/.well-known/strutvane.json` | Move one of them when the app serves it elsewhere; the others stay derived from `apiUrl` |
+| `tenancy` | `true` | `false` for an app without teams: no `{auth}/tenants` request |
 | `appName` | `Strutvane` | Sidebar, document title and sign-in screen |
 | `design`, `brand`, `nonce` | plain, none, none | The design, the public override tokens (`brandHue`, `fontSans`, `radius`, `density`), the CSP nonce of the injected stylesheet. Ignored inside your own `<DesignProvider>` |
 | `routes` | `[]` | Your screens (`{ path, element, title?, icon?, group?, order? }`); they win over resource routes; those with a `title` join the sidebar |

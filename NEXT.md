@@ -1,3 +1,30 @@
+# NEXT: ui `fix/demo` (from `main` f802ccb), 2026-11-20
+
+The demo acceptance run's ui items (hub-side report: `strutvane-demo/ACCEPTANCE.md`). Not pushed:
+the coordinator pushes.
+
+## Done
+- **UI-1 / AUTH-1: one API setting, three URLs** (`src/core/endpoints.ts`, `resolveEndpoints()`):
+  the API at `apiUrl` (`/api/v1`), auth at `{apiUrl}/auth/*`, the manifest at the API's ORIGIN
+  (`/.well-known/strutvane.json`, never under the API base). Props `authUrl` / `manifestUrl` move
+  one of them. A relative `apiUrl` (`api/v1`) is read from the site root, so a deep link never
+  prefixes the API with the page path. `createSessionClient({ authUrl })`, `fetchManifest({ url })`.
+  Tests: `test/core/endpoints.test.ts` and two `<StrutvaneApp>` cases.
+- **UI-2:** `tenancy={false}` never calls `{auth}/tenants` (default `true` keeps today's behaviour;
+  the skeleton passes `false` when teams are off). Reading it from the manifest instead would be a
+  contract change (an RFC first).
+- Docs: README props table, examples on `/api/v1`. Changeset `api-auth-manifest-urls.md` (minor).
+
+## Not done / next
+- The test kit (`createReferenceApi` default `basePath: '/api'`, `screens.tsx`) still uses `/api`.
+  It is consistent with itself and the designs' conformance runs use it: move both to `/api/v1`
+  together with design-crisp and design-vivid in one change.
+- UI-3 (built CSS 0 kB under the CSP) belongs to the skeleton's `main.tsx` and the design packages.
+- The cross-package e2e test (ACCEPTANCE item 6) is not in this repo yet.
+
+## How to verify
+`npm ci`, then `npm run ci` (3x).
+
 # NEXT: ui v2 (`v2/behaviour`), 2026-11-18
 
 ## Done (this commit): the framework 0.2 error model

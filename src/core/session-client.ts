@@ -1,6 +1,7 @@
 /**
  * The session client: sign-in, sign-out, the current actor and tenant switching, against the auth
- * endpoints a Strutvane API serves under its base path (`/api/v1/auth/*`, `@strutvane/auth`).
+ * endpoints a Strutvane API serves under its base path (`/api/v1/auth/*`, `@strutvane/auth`), or
+ * at `authUrl` when auth answers elsewhere.
  *
  * Framework-free, like the rest of `core`. Every failure is an {@link ApiProblemError} carrying the
  * server's RFC 9457 problem (401 wrong password, 429 with `Retry-After`, 403 cross-site…), so the
@@ -33,6 +34,8 @@ export interface SessionTenant {
 export interface SessionClientOptions {
   /** API base URL, e.g. `/api/v1` or `https://api.example.com/api/v1`. */
   readonly apiUrl: string
+  /** Where auth answers, when not at `{apiUrl}/auth` (e.g. `https://id.example.com/auth`). */
+  readonly authUrl?: string
   readonly fetch?: typeof globalThis.fetch
   readonly credentials?: RequestCredentials
   /**
@@ -80,7 +83,7 @@ function actorFrom(body: unknown): SessionActor {
 export function createSessionClient(options: SessionClientOptions): SessionClient {
   const doFetch =
     options.fetch ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args))
-  const base = options.apiUrl.replace(/\/+$/, '')
+  const auth = (options.authUrl ?? `${options.apiUrl.replace(/\/+$/, '')}/auth`).replace(/\/+$/, '')
   const credentials = options.credentials ?? 'same-origin'
 
   const call = async (
@@ -91,7 +94,7 @@ export function createSessionClient(options: SessionClientOptions): SessionClien
   ): Promise<Response> => {
     let response: Response
     try {
-      response = await doFetch(`${base}/auth${path}`, {
+      response = await doFetch(`${auth}${path}`, {
         method,
         credentials,
         headers: {
