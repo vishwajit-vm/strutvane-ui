@@ -119,29 +119,29 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.7",
+    "@biomejs/biome": "2.6.8",
     "@changesets/cli": "3.0.3",
     "@strutvane/framework": "0.2.0-next.1",
     "@tanstack/react-form": "1.33.5",
-    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-query": "5.108.0",
     "@tanstack/react-table": "9.3.1",
     "@tanstack/react-virtual": "3.14.26",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
-    "@testing-library/user-event": "14.6.10",
+    "@testing-library/user-event": "14.6.12",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@vitest/coverage-v8": "5.1.0",
-    "axe-core": "4.14.0",
-    "fast-check": "4.10.2",
+    "@vitest/coverage-v8": "5.1.1",
+    "axe-core": "4.14.1",
+    "fast-check": "4.10.3",
     "jsdom": "31.0.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tsdown": "0.23.7",
     "typescript": "6.0.3",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   },
   "devEngines": {
     "packageManager": {
