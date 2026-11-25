@@ -23,7 +23,7 @@
     "url": "git+https://github.com/vishwajit-vm/strutvane-ui.git"
   },
   "license": "MIT",
-  "author": "The Strutvane Authors",
+  "author": "Vishwajit Mall",
   "type": "module",
   "sideEffects": false,
   "exports": {
